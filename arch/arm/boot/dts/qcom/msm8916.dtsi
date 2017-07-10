@@ -350,14 +350,6 @@
 			< 1094400000 6>,
 			< 1152000000 7>;
 
-		qcom,speed3-bin-v0 =
-			<          0 0>,
-			<  200000000 1>,
-			<  400000000 2>,
-			<  533333000 3>,
-			<  800000000 4>,
-			<  998400000 5>;
-
 		qcom,speed0-bin-v1 =
 			<          0 0>,
 			<  200000000 1>,
@@ -380,14 +372,6 @@
 			< 1152000000 7>,
 			< 1209600000 8>,
 			< 1363200000 9>;
-
-		qcom,speed3-bin-v1 =
-			<          0 0>,
-			<  200000000 1>,
-			<  400000000 2>,
-			<  533333000 3>,
-			<  800000000 4>,
-			<  998400000 5>;
 	};
 
 	cpubw: qcom,cpubw {
@@ -729,6 +713,18 @@
 		compatible = "qcom,adsp-loader";
 		qcom,adsp-state = <0>;
 		qcom,proc-img-to-load = "modem";
+	};
+
+	mcd {
+		compatible = "qcom,mcd";
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+		         <&clock_gcc clk_gcc_crypto_clk>,
+		         <&clock_gcc clk_gcc_crypto_ahb_clk>,
+		         <&clock_gcc clk_gcc_crypto_axi_clk>;
+		clock-names = "core_clk_src", "core_clk", "iface_clk", "bus_clk";
+		qcom,ce-opp-freq = <100000000>;
 	};
 
 	qcom_crypto: qcrypto@720000 {
@@ -1385,7 +1381,7 @@
 		interrupts = <0 145 0 0 146 0>;
 		interrupt-names = "wcnss_wlantx_irq", "wcnss_wlanrx_irq";
 
-		qcom,pronto-vddmx-supply = <&pm8916_l3_corner_ao>;
+		qcom,pronto-vddmx-supply = <&pm8916_l3>;
 		qcom,pronto-vddcx-supply = <&pm8916_s1_corner>;
 		qcom,pronto-vddpx-supply = <&pm8916_l7>;
 		qcom,iris-vddxo-supply   = <&pm8916_l7>;
@@ -1752,6 +1748,7 @@
 		clock-names = "core_clk", "iface_clk", "bus_clk";
 		qcom,clock-configs = <0x1 0x0 0x0>;
 		qcom,sw-power-collapse;
+		qcom,enable-minimum-voting;
 		qcom,load-freq-tbl = <352800 228570000 0xffffffff>,
 			<352800 228570000 0x55555555>,
 			<244800 160000000 0xffffffff>,
@@ -1810,11 +1807,11 @@
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 99600 831900>, /* VGA 30 fps */
-					<63 512 298900 831900>, /* VGA 60 fps */
-					<63 512 298900 831900>, /* 720p 30 fps */
-					<63 512 677600 1331000>, /* 720p 60 fps */
-					<63 512 677600 1331000>; /* 1080p 30 fps */
+					<63 512 99600 3200000>, /* VGA 30 fps */
+					<63 512 298900 3200000>, /* VGA 60 fps */
+					<63 512 298900 3200000>, /* 720p 30 fps */
+					<63 512 677600 3200000>, /* 720p 60 fps */
+					<63 512 677600 3200000>; /* 1080p 30 fps */
 				qcom,bus-configs = <0x030fcfff>;
 			};
 			qcom,msm-bus-client@2 {

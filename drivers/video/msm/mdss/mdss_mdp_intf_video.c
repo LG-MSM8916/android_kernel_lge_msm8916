@@ -24,6 +24,14 @@
 #include "mdss_debug.h"
 #include "mdss_mdp_trace.h"
 
+#if defined(CONFIG_LGD_LD083_VIDEO_WUXGA_PT_PANEL)
+int is_dsv_cont_splash_screening_f;
+#elif (defined(CONFIG_LGD_INCELL_VIDEO_WVGA_PT_PANEL) || defined(CONFIG_LGD_INCELL_VIDEO_FWVGA_PT_PANEL) \
+|| defined(CONFIG_JDI_INCELL_VIDEO_HD_PANEL)) || defined(CONFIG_LGD_INCELL_PHASE3_VIDEO_HD_PT_PANEL) \
+|| defined(CONFIG_JDI_INCELL_VIDEO_FHD_PANEL) || defined (CONFIG_LGD_DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL)
+extern int has_dsv_f;
+int is_dsv_cont_splash_screening_f;
+#endif
 /* wait for at least 2 vsyncs for lowest refresh rate (24hz) */
 #define VSYNC_TIMEOUT_US 100000
 
@@ -899,6 +907,18 @@ static int mdss_mdp_video_config_fps(struct mdss_mdp_ctl *ctl,
 
 exit_dfps:
 			spin_unlock_irqrestore(&ctx->dfps_lock, flags);
+#if defined(CONFIG_JDI_INCELL_VIDEO_FHD_PANEL)
+			/*
+			 * Add another wait here so that time gen flush is
+			 * done solitarily, commit will succeed the dfps
+			 * update in HAL.
+			 */
+			rc = mdss_mdp_video_dfps_wait4vsync(ctl);
+			if (rc < 0) {
+				pr_err("Error during dfps wait4vsync\n");
+				return rc;
+			}
+#endif
 			mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 		} else {
 			pr_err("intf %d panel, unknown FPS mode\n",
@@ -1020,6 +1040,16 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 		ctl->panel_data->next->panel_info.cont_splash_enabled = 0;
 
 	if (!handoff) {
+#if defined(CONFIG_LGD_LD083_VIDEO_WUXGA_PT_PANEL)
+			pr_info("%s: %d is_dsv_cont_splash_screening_f = 1 \n", __func__, __LINE__);
+			is_dsv_cont_splash_screening_f = 1;
+#elif (defined(CONFIG_LGD_INCELL_VIDEO_WVGA_PT_PANEL) || defined(CONFIG_LGD_INCELL_VIDEO_FWVGA_PT_PANEL) \
+|| defined(CONFIG_JDI_INCELL_VIDEO_HD_PANEL)) || defined(CONFIG_LGD_INCELL_PHASE3_VIDEO_HD_PT_PANEL) \
+|| defined(CONFIG_JDI_INCELL_VIDEO_FHD_PANEL) || defined (CONFIG_LGD_DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL)
+		if (has_dsv_f) {
+			is_dsv_cont_splash_screening_f = 1;
+		}
+#endif
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_CONT_SPLASH_BEGIN,
 					      NULL);
 		if (ret) {
@@ -1048,6 +1078,17 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 
 		ret = mdss_mdp_ctl_intf_event(ctl,
 			MDSS_EVENT_CONT_SPLASH_FINISH, NULL);
+#if defined(CONFIG_LGD_LD083_VIDEO_WUXGA_PT_PANEL)
+			pr_info("%s: %d send event... MDSS_EVENT_CONT_SPLASH_FINISH \n", __func__, __LINE__);
+			pr_info("%s: %d is_dsv_cont_splash_screening_f = 0 \n", __func__, __LINE__);
+			is_dsv_cont_splash_screening_f = 0;
+#elif (defined(CONFIG_LGD_INCELL_VIDEO_WVGA_PT_PANEL) || defined(CONFIG_LGD_INCELL_VIDEO_FWVGA_PT_PANEL) \
+|| defined(CONFIG_JDI_INCELL_VIDEO_HD_PANEL) || defined(CONFIG_JDI_INCELL_VIDEO_FHD_PANEL)) \
+|| defined(CONFIG_LGD_INCELL_PHASE3_VIDEO_HD_PT_PANEL) || defined (CONFIG_LGD_DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL)
+		if (has_dsv_f) {
+			is_dsv_cont_splash_screening_f = 0;
+		}
+#endif
 	}
 
 	return ret;
@@ -1228,6 +1269,9 @@ static int mdss_mdp_video_intfs_setup(struct mdss_mdp_ctl *ctl,
 		mdss_mdp_fetch_start_config(ctx, ctl);
 	} else {
 		mdss_mdp_handoff_programmable_fetch(ctl, ctx);
+/*	LGE_CHANGE_S, [Display][yonghwanaaron.kim@lge.com], 2015-03-9, set underflow color on booting time with continuous splash */
+		mdp_video_write(ctx, MDSS_MDP_REG_INTF_UNDERFLOW_COLOR, itp.underflow_clr);
+/*	LGE_CHANGE_E, [Display][yonghwanaaron.kim@lge.com], 2015-03-9, set underflow color on booting time with continuous splash */
 	}
 
 	mdp_video_write(ctx, MDSS_MDP_REG_INTF_PANEL_FORMAT, ctl->dst_format);

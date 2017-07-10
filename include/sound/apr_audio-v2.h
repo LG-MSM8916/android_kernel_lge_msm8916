@@ -2803,6 +2803,13 @@ struct asm_softvolume_params {
 
 #define ASM_MEDIA_FMT_MULTI_CHANNEL_PCM_V2 0x00010DA5
 
+#if defined(CONFIG_SND_LGE_EFFECT) || defined(CONFIG_SND_LGE_NORMALIZER) \
+	    || defined(CONFIG_SND_LGE_MABL)
+#define ASM_STREAM_POSTPROC_TOPO_ID_DEFAULT 0x00010BE4
+#define ASM_STREAM_POSTPROC_TOPO_ID_DEFAULT_LGE 0x10009009
+#define ASM_STREAM_POSTPROC_TOPO_ID_OFFLOAD_LGE 0x10009010
+#endif
+
 #define ASM_MEDIA_FMT_EVRCB_FS 0x00010BEF
 
 #define ASM_MEDIA_FMT_EVRCWB_FS 0x00010BF0
@@ -6813,21 +6820,6 @@ struct asm_eq_params {
     AUDPROC_MODULE_ID_BASS_BOOST.
 */
 #define AUDPROC_PARAM_ID_BASS_BOOST_STRENGTH                     0x000108A4
-
-/** ID of the PBE module.
-    This module supports the following parameter IDs:
-    - #AUDPROC_PARAM_ID_PBE_ENABLE
-    - #AUDPROC_PARAM_ID_PBE_PARAM_CONFIG
-*/
-#define AUDPROC_MODULE_ID_PBE                                    0x00010C2A
-/** ID of the Bass Boost enable parameter used by
-    AUDPROC_MODULE_ID_BASS_BOOST.
-*/
-#define AUDPROC_PARAM_ID_PBE_ENABLE                              0x00010C2B
-/** ID of the Bass Boost mode parameter used by
-    AUDPROC_MODULE_ID_BASS_BOOST.
-*/
-#define AUDPROC_PARAM_ID_PBE_PARAM_CONFIG                        0x00010C49
 
 /** ID of the Virtualizer module. This module supports the
     following parameter IDs:

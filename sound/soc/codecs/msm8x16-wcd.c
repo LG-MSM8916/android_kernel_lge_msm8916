@@ -45,6 +45,10 @@
 #include "msm8916-wcd-irq.h"
 #include "msm8x16_wcd_registers.h"
 
+#ifdef CONFIG_LGE_ENABLE_HDSET_FACTORY
+#include <mach/board_lge.h>
+#endif
+
 #define MSM8X16_WCD_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
 			SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000)
 #define MSM8X16_WCD_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
@@ -98,6 +102,11 @@ enum {
 #define SPK_PMU 3
 
 #define MICBIAS_DEFAULT_VAL 1800000
+
+#ifdef CONFIG_LGE_ENABLE_HDSET_FACTORY
+#define MICBIAS_FACTORY_VAL 2700000
+#endif
+
 #define MICBIAS_MIN_VAL 1600000
 #define MICBIAS_STEP_SIZE 50000
 
@@ -108,6 +117,10 @@ enum {
 
 #define MSM8X16_WCD_MBHC_BTN_COARSE_ADJ  100 /* in mV */
 #define MSM8X16_WCD_MBHC_BTN_FINE_ADJ 12 /* in mV */
+
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+extern int ext_spk_boost_gpio;
+#endif
 
 #define VOLTAGE_CONVERTER(value, min_value, step_size)\
 	((value - min_value)/step_size);
@@ -128,6 +141,9 @@ enum {
 	RX_MIX1_INP_SEL_RX3,
 };
 
+#ifdef CONFIG_MACH_LGE
+static int tapan_tx_mute = 0;
+#endif
 static const DECLARE_TLV_DB_SCALE(digital_gain, 0, 1, 0);
 static const DECLARE_TLV_DB_SCALE(analog_gain, 0, 25, 1);
 static struct snd_soc_dai_driver msm8x16_wcd_i2s_dai[];
@@ -1713,6 +1729,14 @@ static void msm8x16_wcd_dt_parse_micbias_info(struct device *dev,
 	const char *prop_name = "qcom,cdc-micbias-cfilt-mv";
 	int ret;
 
+#ifdef CONFIG_LGE_ENABLE_HDSET_FACTORY
+    if(lge_get_boot_mode() != LGE_BOOT_MODE_NORMAL && lge_get_boot_mode() != LGE_BOOT_MODE_QEM_130K){
+        pr_info("%s: mic bias set MICBIAS_FACTORY_VAL\n",__func__);
+        micbias->cfilt1_mv = MICBIAS_FACTORY_VAL;
+        return;
+    }
+#endif
+
 	ret = of_property_read_u32(dev->of_node, prop_name,
 			&micbias->cfilt1_mv);
 	if (ret) {
@@ -2416,6 +2440,43 @@ static int msm8x16_wcd_put_iir_band_audio_mixer(
 	return 0;
 }
 
+#ifdef CONFIG_MACH_LGE
+static const char *const tapan_tx_mute_text[] = {"unmute", "mute"};
+static const struct soc_enum tapan_tx_mute_enum[] = {
+	SOC_ENUM_SINGLE_EXT(2, tapan_tx_mute_text),
+};
+
+static int tapan_tx_mute_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	pr_debug("%s: tapan_tx_mute  = %d", __func__, tapan_tx_mute);
+	ucontrol->value.integer.value[0] = tapan_tx_mute;
+	return 0;
+}
+static int tapan_tx_mute_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	u16 tx_vol_ctl_reg0 = MSM8X16_WCD_A_CDC_TX1_VOL_CTL_CFG;
+	u16 tx_vol_ctl_reg1 = MSM8X16_WCD_A_CDC_TX1_VOL_CTL_CFG + 32;
+	switch (ucontrol->value.integer.value[0]) {
+		case 0:
+			snd_soc_update_bits(codec, tx_vol_ctl_reg0, 0x01, 0);
+			snd_soc_update_bits(codec, tx_vol_ctl_reg1, 0x01, 0);
+			break;
+		case 1:
+			snd_soc_update_bits(codec, tx_vol_ctl_reg0, 0x01, 1);
+			snd_soc_update_bits(codec, tx_vol_ctl_reg1, 0x01, 1);
+			break;
+		default:
+			break;
+	}
+	tapan_tx_mute = ucontrol->value.integer.value[0];
+	pr_debug("%s: tapan_tx_mute = %d\n", __func__, tapan_tx_mute);
+	return 0;
+}
+#endif
+
 static const char * const msm8x16_wcd_loopback_mode_ctrl_text[] = {
 		"DISABLE", "ENABLE"};
 static const struct soc_enum msm8x16_wcd_loopback_mode_ctl_enum[] = {
@@ -2473,6 +2534,10 @@ static const struct soc_enum cf_rxmix3_enum =
 	SOC_ENUM_SINGLE(MSM8X16_WCD_A_CDC_RX3_B4_CTL, 0, 3, cf_text);
 
 static const struct snd_kcontrol_new msm8x16_wcd_snd_controls[] = {
+#ifdef CONFIG_MACH_LGE
+	SOC_ENUM_EXT("TX_VOL_CTL_MUTE", tapan_tx_mute_enum[0],
+	tapan_tx_mute_get, tapan_tx_mute_put),
+#endif
 
 	SOC_ENUM_EXT("Boost Option", msm8x16_wcd_boost_option_ctl_enum[0],
 		msm8x16_wcd_boost_option_get, msm8x16_wcd_boost_option_set),
@@ -3099,6 +3164,9 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
 	dev_dbg(w->codec->dev, "%s %d %s\n", __func__, event, w->name);
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+	dev_dbg(w->codec->dev, "%s start -> ext spk boost gpio value : %d\n", __func__, gpio_get_value(ext_spk_boost_gpio));
+#endif
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		snd_soc_update_bits(codec,
@@ -3144,6 +3212,10 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 				snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_SPKR_DAC_CTL,
 					0x10, 0x00);
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+			if (msm8x16_wcd->ext_spk_boost_set)
+				gpio_direction_output(ext_spk_boost_gpio, 1);
+#endif
 			break;
 		case BOOST_ALWAYS:
 		case BOOST_ON_FOREVER:
@@ -3183,6 +3255,10 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 					snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_SPKR_DRV_CTL,
 					0xEF, 0x69);
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+			if (msm8x16_wcd->ext_spk_boost_set)
+				gpio_direction_output(ext_spk_boost_gpio, 0);
+#endif
 				break;
 			case BOOST_ALWAYS:
 			case BOOST_ON_FOREVER:
@@ -3215,6 +3291,9 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 			msm8x16_wcd_boost_mode_sequence(codec, SPK_PMD);
 		break;
 	}
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+	dev_dbg(w->codec->dev, "%s end -> ext spk boost gpio value : %d\n", __func__, gpio_get_value(ext_spk_boost_gpio));
+#endif
 	return 0;
 }
 
@@ -4486,6 +4565,10 @@ int msm8x16_wcd_digital_mute(struct snd_soc_dai *dai, int mute)
 		return 0;
 	}
 
+#ifdef CONFIG_MACH_LGE
+    mute |= tapan_tx_mute;
+    pr_debug("%s: Re-Digital Mute val = %d\n", __func__, mute);
+#endif
 	mute = (mute) ? 1 : 0;
 	if (!mute) {
 		/*
@@ -4620,6 +4703,9 @@ static int msm8x16_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct msm8x16_wcd_priv *msm8x16_wcd = snd_soc_codec_get_drvdata(codec);
 
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+	dev_dbg(w->codec->dev, "%s start -> ext spk boost gpio value : %d\n", __func__, gpio_get_value(ext_spk_boost_gpio));
+#endif
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		dev_dbg(w->codec->dev,
@@ -4640,6 +4726,10 @@ static int msm8x16_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 		usleep_range(7000, 7100);
 		snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_CDC_RX1_B6_CTL, 0x01, 0x00);
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+		if (msm8x16_wcd->ext_spk_boost_set)
+			gpio_direction_output(ext_spk_boost_gpio, 1);
+#endif
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		snd_soc_update_bits(codec,
@@ -4652,6 +4742,10 @@ static int msm8x16_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 				__func__, msm8x16_wcd->boost_option);
 			msm8x16_wcd_boost_mode_sequence(codec, EAR_PMD);
 		}
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+		if (msm8x16_wcd->ext_spk_boost_set)
+			gpio_direction_output(ext_spk_boost_gpio, 0);
+#endif
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		dev_dbg(w->codec->dev,
@@ -4671,6 +4765,9 @@ static int msm8x16_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 			MSM8X16_WCD_A_ANALOG_RX_HPH_CNP_WG_TIME, 0xFF, 0x16);
 		break;
 	}
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+	dev_dbg(w->codec->dev, "%s end -> ext spk boost gpio value : %d\n", __func__, gpio_get_value(ext_spk_boost_gpio));
+#endif
 	return 0;
 }
 

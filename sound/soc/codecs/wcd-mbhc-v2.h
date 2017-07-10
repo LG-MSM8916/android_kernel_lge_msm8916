@@ -15,6 +15,14 @@
 #include <linux/wait.h>
 #include <linux/stringify.h>
 #include "wcdcal-hwdep.h"
+#ifdef CONFIG_MACH_LGE //LGE Update // add switch dev for mbhc 
+#include <linux/switch.h> 
+#endif //LGE Update // add switch dev for mbhc 
+
+#ifdef CONFIG_MACH_LGE
+#include <linux/wakelock.h>
+#define WCD_BTN_RELEASE_WAKE_LOCK_MS 200
+#endif  // CONFIG_MACH_LGE
 
 #define TOMBAK_MBHC_NC	0
 #define TOMBAK_MBHC_NO	1
@@ -408,12 +416,17 @@ struct wcd_mbhc {
 	/* Work to correct accessory type */
 	struct work_struct correct_plug_swch;
 	struct notifier_block nblock;
+	struct switch_dev sdev; 	//LGE Update - add switch dev for mbhc
 
 	struct wcd_mbhc_register *wcd_mbhc_regs;
 
 	struct completion btn_press_compl;
 	struct mutex hphl_pa_lock;
 	struct mutex hphr_pa_lock;
+
+#ifdef CONFIG_MACH_LGE
+    struct wake_lock btn_release_wake_lock;
+#endif  // CONFIG_MACH_LGE
 };
 #define WCD_MBHC_CAL_SIZE(buttons, rload) ( \
 	sizeof(struct wcd_mbhc_general_cfg) + \

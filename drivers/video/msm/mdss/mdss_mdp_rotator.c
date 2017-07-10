@@ -501,6 +501,9 @@ int mdss_mdp_rotator_setup(struct msm_fb_data_type *mfd,
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	struct mdss_mdp_rotator_session *rot = NULL;
 	struct mdss_mdp_format_params *fmt;
+	struct mdss_mdp_pipe *pipe;
+	struct mdss_mdp_perf_params perf;
+	struct mdss_mdp_ctl *ctl;
 	u32 bwc_enabled;
 	bool format_changed = false;
 	int ret = 0;

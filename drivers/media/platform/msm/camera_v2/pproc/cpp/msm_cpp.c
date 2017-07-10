@@ -1825,6 +1825,12 @@ static int msm_cpp_cfg(struct cpp_device *cpp_dev,
 		sizeof(int32_t)))
 		pr_err("error cannot copy error\n");
 
+	//LGE_CHANGE_S, Fix for kmem leak on 8916, jongkwon.chae@lge.com
+	if (rc < 0) {
+		kfree(frame);
+	}
+	//LGE_CHANGE_E, Fix for kmem leak on 8916, jongkwon.chae@lge.com
+
 	return rc;
 }
 

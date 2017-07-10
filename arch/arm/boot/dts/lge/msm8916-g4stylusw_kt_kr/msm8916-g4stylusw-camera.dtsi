@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "../msm8916-lge-common/msm8916-g4stylus-camera.dtsi"
+
+&s5k3l2_eeprom {
+	status = "disabled";
+};
+
+&s5k3l2 {
+	status = "disabled";
+};
+
+&cci {
+	ov5670_a: qcom,camera_a@1 {
+		status = "ok";
+		revision = "...rev_a";
+		compatible           = "qcom,ov5670";
+		reg                  = <0x3>;
+		qcom,slave-id        = <0x6c 0x300b 0x5670>;
+		qcom,csiphy-sd-index = <1>;
+		qcom,csid-sd-index   = <1>;
+		qcom,mount-angle     = <270>;
+		qcom,sensor-name     = "ov5670";
+
+		cam_vio-supply  = <&pm8916_l6>;		//always-on
+		cam_vana-supply = <&pm8916_l10>;
+		qcom,cam-vreg-name = "cam_vdig", "cam_vio", "cam_vana";
+		qcom,cam-vreg-min-voltage = <0 0 2800000>;
+		qcom,cam-vreg-max-voltage = <0 0 2800000>;
+		qcom,cam-vreg-op-mode     = <0 0 80000>;
+
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk1_default &cam_sensor_front_default>;
+		pinctrl-1 = <&cam_sensor_mclk1_sleep &cam_sensor_front_sleep>;
+
+		gpios = <&msm_gpio 27  0>,
+		        <&msm_gpio 28  0>,
+			<&msm_gpio 121 0>;
+
+		qcom,gpio-no-mux  = <0>;
+		qcom,gpio-reset   = <1>;
+		qcom,gpio-vdig    = <2>;
+
+		qcom,gpio-req-tbl-num   = <0 1 2>;
+		qcom,gpio-req-tbl-flags = <1 0 0>;
+		qcom,gpio-req-tbl-label = "CAMIF_MCLK2",
+		                          "CAM_RESET2",
+		                          "MAIN_VDIG_EN2";
+
+		qcom,csi-lane-assign    = <0x4320>;
+		qcom,csi-lane-mask      = <0x7>;
+		qcom,sensor-position    = <1>;
+		qcom,sensor-mode        = <1>;
+		qcom,cci-master         = <0>;
+
+		clocks = <&clock_gcc clk_mclk1_clk_src>,
+		         <&clock_gcc clk_gcc_camss_mclk1_clk>;
+		clock-names = "cam_src_clk", "cam_clk";
+	        qcom,gpio-maker-id = <&msm_gpio 46 0x0>;
+		qcom,mclk-23880000;
+	};
+};
+
+&ov5670 {
+	status = "ok";
+	revision = "rev_b...";
+	qcom,gpio-maker-id = <&msm_gpio 32 0x0>;
+};

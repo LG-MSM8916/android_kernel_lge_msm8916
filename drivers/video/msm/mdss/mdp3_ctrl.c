@@ -474,18 +474,11 @@ static int mdp3_ctrl_clk_enable(struct msm_fb_data_type *mfd, int enable)
 static int mdp3_ctrl_res_req_bus(struct msm_fb_data_type *mfd, int status)
 {
 	int rc = 0;
-	u32 vtotal = 0;
 	if (status) {
-		struct mdss_panel_info *panel_info = mfd->panel_info;
 		u64 ab = 0;
 		u64 ib = 0;
-		vtotal = panel_info->yres + panel_info->lcdc.v_back_porch +
-			panel_info->lcdc.v_front_porch +
-			panel_info->lcdc.v_pulse_width;
-		ab = panel_info->xres * vtotal * ppp_bpp(mfd->fb_imgType);
-		ab *= panel_info->mipi.frame_rate;
-		/* ab and ib vote should be same for honest voting */
-		ib = ab;
+		mdp3_calc_dma_res(mfd->panel_info, NULL, &ab, &ib,
+			ppp_bpp(mfd->fb_imgType));
 		rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, ab, ib);
 	} else {
 		rc = mdp3_bus_scale_set_quota(MDP3_CLIENT_DMA_P, 0, 0);
@@ -497,8 +490,11 @@ static int mdp3_ctrl_res_req_clk(struct msm_fb_data_type *mfd, int status)
 {
 	int rc = 0;
 	if (status) {
+		u64 mdp_clk_rate = 0;
+		mdp3_calc_dma_res(mfd->panel_info, &mdp_clk_rate,
+			NULL, NULL, 0);
 
-		mdp3_clk_set_rate(MDP3_CLK_MDP_SRC, MDP_CORE_CLK_RATE_SVS,
+		mdp3_clk_set_rate(MDP3_CLK_MDP_SRC, mdp_clk_rate,
 				MDP3_CLIENT_DMA_P);
 		mdp3_clk_set_rate(MDP3_CLK_VSYNC, MDP_VSYNC_CLK_RATE,
 				MDP3_CLIENT_DMA_P);
@@ -778,14 +774,11 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 	}
 
 	/*
-	* Get a reference to the runtime pm device.
-	* If idle pc feature is enabled, it will be released
-	* at end of this routine else, when device is turned off.
-	*/
+	 * Keep a reference to the runtime pm till device is turned
+	 * off, where this reference will be released.
+	 */
 	pm_runtime_get_sync(&mdp3_res->pdev->dev);
 
-	/* Increment the overlay active count */
-	atomic_inc(&mdp3_res->active_intf_cnt);
 	mdp3_ctrl_notifier_register(mdp3_session,
 		&mdp3_session->mfd->mdp_sync_pt_data.notifier);
 
@@ -849,12 +842,8 @@ static int mdp3_ctrl_on(struct msm_fb_data_type *mfd)
 
 	mdp3_ctrl_pp_resume(mfd);
 on_error:
-	if (rc || (mdp3_res->idle_pc_enabled &&
-			(mfd->panel_info->type == MIPI_CMD_PANEL))) {
-		if (rc) {
-			pr_err("Failed to turn on fb%d\n", mfd->index);
-			atomic_dec(&mdp3_res->active_intf_cnt);
-		}
+	if (rc) {
+		pr_err("Failed to turn on fb%d\n", mfd->index);
 		pm_runtime_put(&mdp3_res->pdev->dev);
 	}
 end:
@@ -877,14 +866,6 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		pr_err("mdp3_ctrl_on no device");
 		return -ENODEV;
 	}
-
-	/*
-	 * Keep a reference to the runtime pm until the overlay is turned
-	 * off, and then release this last reference at the end. This will
-	 * help in distinguishing between idle power collapse versus suspend
-	 * power collapse
-	 */
-	pm_runtime_get_sync(&mdp3_res->pdev->dev);
 
 	panel = mdp3_session->panel;
 	mutex_lock(&mdp3_session->lock);
@@ -974,21 +955,10 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 		mdp3_session->in_splash_screen = 0;
 		mdp3_res->solid_fill_vote_en = false;
 		mdp3_session->status = 0;
-		if (atomic_dec_return(&mdp3_res->active_intf_cnt) != 0) {
-			pr_warn("active_intf_cnt unbalanced\n");
-			atomic_set(&mdp3_res->active_intf_cnt, 0);
-		}
-		/*
-		* Release the pm runtime reference held when
-		* idle pc feature is not enabled
-		*/
-		if (!mdp3_res->idle_pc_enabled ||
-			(mfd->panel_info->type != MIPI_CMD_PANEL)) {
-			rc = pm_runtime_put(&mdp3_res->pdev->dev);
-			if (rc)
-				pr_err("unable to suspend w/pm_runtime_put (%d)\n",
-					rc);
-		}
+
+		/* Release the pm runtime reference */
+		pm_runtime_put_sync_suspend(&mdp3_res->pdev->dev);
+
 		mdp3_bufq_deinit(&mdp3_session->bufq_out);
 		if (mdp3_session->overlay.id != MSMFB_NEW_REQUEST) {
 			mdp3_session->overlay.id = MSMFB_NEW_REQUEST;
@@ -997,8 +967,6 @@ static int mdp3_ctrl_off(struct msm_fb_data_type *mfd)
 	}
 off_error:
 	mutex_unlock(&mdp3_session->lock);
-	/* Release the last reference to the runtime device */
-	pm_runtime_put(&mdp3_res->pdev->dev);
 
 	return 0;
 }
@@ -1022,42 +990,27 @@ static int mdp3_ctrl_reset(struct msm_fb_data_type *mfd)
 	panel = mdp3_session->panel;
 	mdp3_dma = mdp3_session->dma;
 	mutex_lock(&mdp3_session->lock);
-	if (mdp3_res->idle_pc) {
-		mdp3_clk_enable(1, 0);
-		mdp3_dynamic_clock_gating_ctrl(0);
-		mdp3_qos_remapper_setup(panel);
-	}
+
+	vsync_client = mdp3_dma->vsync_client;
 
 	rc = mdp3_iommu_enable(MDP3_CLIENT_DMA_P);
 	if (rc) {
 		pr_err("fail to attach dma iommu\n");
-		if (mdp3_res->idle_pc)
-			mdp3_clk_enable(0, 0);
 		goto reset_error;
 	}
 
-	vsync_client = mdp3_dma->vsync_client;
-
 	mdp3_ctrl_intf_init(mfd, mdp3_session->intf);
 	mdp3_ctrl_dma_init(mfd, mdp3_dma);
-	mdp3_ppp_init();
-	mdp3_ctrl_pp_resume(mfd);
 	if (vsync_client.handler)
 		mdp3_dma->vsync_enable(mdp3_dma, &vsync_client);
 
-	if (!mdp3_res->idle_pc) {
-		mdp3_session->first_commit = true;
-		mfd->panel_info->cont_splash_enabled = 0;
-		mdp3_session->in_splash_screen = 0;
-		mdp3_splash_done(mfd->panel_info);
-		/* Disable Auto refresh */
-		mdp3_autorefresh_disable(mfd->panel_info);
-	} else {
-		mdp3_res->idle_pc = false;
-		mdp3_clk_enable(0, 0);
-		mdp3_iommu_disable(MDP3_CLIENT_DMA_P);
-	}
+	mdp3_session->first_commit = true;
+	mfd->panel_info->cont_splash_enabled = 0;
+	mdp3_session->in_splash_screen = 0;
+	mdp3_splash_done(mfd->panel_info);
 
+	/* Disable Auto refresh */
+	mdp3_autorefresh_disable(mfd->panel_info);
 reset_error:
 	mutex_unlock(&mdp3_session->lock);
 	return rc;
@@ -1257,10 +1210,7 @@ static int mdp3_ctrl_display_commit_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	panel = mdp3_session->panel;
-	if (mdp3_session->in_splash_screen ||
-		mdp3_res->idle_pc) {
-		pr_debug("%s: reset- in_splash = %d, idle_pc = %d", __func__,
-			mdp3_session->in_splash_screen, mdp3_res->idle_pc);
+	if (mdp3_session->in_splash_screen) {
 		rc = mdp3_ctrl_reset(mfd);
 		if (rc) {
 			pr_err("fail to reset display\n");
@@ -1371,10 +1321,7 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 	if (!mdp3_session || !mdp3_session->dma)
 		return;
 
-	if (mdp3_session->in_splash_screen ||
-		mdp3_res->idle_pc) {
-		pr_debug("%s: reset- in_splash = %d, idle_pc = %d", __func__,
-			mdp3_session->in_splash_screen, mdp3_res->idle_pc);
+	if (mdp3_session->in_splash_screen) {
 		rc = mdp3_ctrl_reset(mfd);
 		if (rc) {
 			pr_err("fail to reset display\n");
@@ -1429,7 +1376,6 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 		mdp3_clk_enable(0, 0);
 	}
 
-	panel = mdp3_session->panel;
 	if (mdp3_session->first_commit) {
 		/*wait to ensure frame is sent to panel*/
 		if (panel_info->mipi.post_init_delay)
@@ -1438,12 +1384,10 @@ static void mdp3_ctrl_pan_display(struct msm_fb_data_type *mfd)
 		else
 			msleep(1000 / panel_info->mipi.frame_rate);
 		mdp3_session->first_commit = false;
-		if (panel)
-			panel->event_handler(panel, MDSS_EVENT_POST_PANEL_ON,
-					NULL);
 	}
 
 	mdp3_session->vsync_before_commit = 0;
+	panel = mdp3_session->panel;
 	if (!splash_done || mdp3_session->esd_recovery == true) {
 		if(panel && panel->set_backlight)
 			panel->set_backlight(panel, panel->panel_info.bl_max);
@@ -2443,12 +2387,8 @@ static int mdp3_ctrl_ioctl_handler(struct msm_fb_data_type *mfd,
 		}
 		break;
 	case MSMFB_ASYNC_BLIT:
-		if (mdp3_session->in_splash_screen || mdp3_res->idle_pc) {
-			pr_debug("%s: reset- in_splash = %d, idle_pc = %d",
-				__func__, mdp3_session->in_splash_screen,
-				mdp3_res->idle_pc);
+		if (mdp3_session->in_splash_screen)
 			mdp3_ctrl_reset(mfd);
-		}
 		rc = mdp3_ctrl_async_blit_req(mfd, argp);
 		break;
 	case MSMFB_BLIT:
@@ -2688,12 +2628,6 @@ int mdp3_ctrl_init(struct msm_fb_data_type *mfd)
 			&mdp3_session->mfd->mdp_sync_pt_data.notifier);
 	}
 
-	/*
-	* Increment the overlay active count.
-	* This is needed to ensure that if idle power collapse kicks in
-	* right away, it would be handled correctly.
-	*/
-	atomic_inc(&mdp3_res->active_intf_cnt);
 	if (splash_mismatch) {
 		pr_err("splash memory mismatch, stop splash\n");
 		mdp3_ctrl_off(mfd);

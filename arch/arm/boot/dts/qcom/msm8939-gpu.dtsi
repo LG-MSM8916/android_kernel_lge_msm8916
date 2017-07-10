@@ -11,7 +11,6 @@
  */
 
 &soc {
-
 	/* To use BIMC based bus governor */
 	gpubw: qcom,gpubw {
 		compatible = "qcom,devbw";

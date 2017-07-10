@@ -1394,6 +1394,7 @@ static int ngd_slim_probe(struct platform_device *pdev)
 	dev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, dev);
 	slim_set_ctrldata(&dev->ctrl, dev);
+	dev->int_mdm = of_property_read_bool(pdev->dev.of_node,"qcom,int_mdm");
 
 	/* Create IPC log context */
 	dev->ipc_slimbus_log = ipc_log_context_create(IPC_SLIMBUS_LOG_PAGES,
@@ -1519,15 +1520,12 @@ static int ngd_slim_probe(struct platform_device *pdev)
 	pm_runtime_set_suspended(dev->dev);
 	pm_runtime_enable(dev->dev);
 
-	ret = of_property_read_string(pdev->dev.of_node,
-				"qcom,subsys-name", &subsys_name);
-	if (ret) {
-		dev->dsp.nb.notifier_call = dsp_ssr_notify_cb;
+	dev->dsp.nb.notifier_call = dsp_ssr_notify_cb;
+	if (dev->int_mdm) {
+		dev->dsp.ssr = subsys_notif_register_notifier("modem",&dev->dsp.nb);
+	}
+	else {
 		dev->dsp.ssr = subsys_notif_register_notifier("adsp",
-							&dev->dsp.nb);
-	} else {
-		dev->dsp.nb.notifier_call = dsp_ssr_notify_cb;
-		dev->dsp.ssr = subsys_notif_register_notifier(subsys_name,
 							&dev->dsp.nb);
 	}
 	if (IS_ERR_OR_NULL(dev->dsp.ssr))

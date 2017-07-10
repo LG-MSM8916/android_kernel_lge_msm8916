@@ -31,6 +31,10 @@
 #include "wcd-mbhc-v2.h"
 #include "wcdcal-hwdep.h"
 
+#ifdef CONFIG_LGE_ENABLE_HDSET_MIC_BIAS_FOR_MITS
+#include <mach/board_lge.h>
+#endif
+
 #define WCD_MBHC_JACK_MASK (SND_JACK_HEADSET | SND_JACK_OC_HPHL | \
 			   SND_JACK_OC_HPHR | SND_JACK_LINEOUT | \
 			   SND_JACK_UNSUPPORTED | SND_JACK_MECHANICAL)
@@ -51,11 +55,59 @@
 #define MAX_IMPED 60000
 
 #define WCD_MBHC_BTN_PRESS_COMPL_TIMEOUT_MS  50
+#ifdef CONFIG_MACH_LGE
+char *button_name[4] = {"Hook Key", "Voice Assist", "Volume Up", "Volume Down"};
+#endif
 
 static int det_extn_cable_en;
 module_param(det_extn_cable_en, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
+#ifdef CONFIG_MACH_LGE // add switch dev for mbhc
+enum {
+	NO_DEVICE   = 0,
+	LGE_HEADSET = (1 << 0),
+	LGE_HEADSET_NO_MIC = (1 << 1),
+};
+
+#ifdef CONFIG_LGE_ENABLE_HDSET_MIC_BIAS_FOR_MITS
+static int lge_mbhc_check_factory_boot_mode(void)
+{
+    enum lge_boot_mode_type lge_boot_mode;
+    int result = false;
+
+    lge_boot_mode = lge_get_boot_mode();
+
+    if(lge_boot_mode != LGE_BOOT_MODE_NORMAL && lge_boot_mode != LGE_BOOT_MODE_QEM_130K)
+        result = true;
+    else
+        result = false;
+
+    pr_debug("\n %s: result: %d\n", __func__, result);
+
+    return result;
+}
+#endif
+static ssize_t lge_hsd_print_name(struct switch_dev *sdev, char *buf)
+{
+	switch (switch_get_state(sdev)) {
+		case NO_DEVICE:
+			return sprintf(buf, "No Device");
+		case LGE_HEADSET:
+			return sprintf(buf, "Headset");
+		case LGE_HEADSET_NO_MIC:
+			return sprintf(buf, "Headset");
+		default:
+			break;
+	}
+	return -EINVAL;
+}
+
+static ssize_t lge_hsd_print_state(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%d\n", switch_get_state(sdev));
+}
+#endif // add switch dev for mbhc
 
 enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_CS = 0,
@@ -67,7 +119,32 @@ enum wcd_mbhc_cs_mb_en_flag {
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
+	pr_info("[LGE MBHC] %s: status : %d , mask : 0x%x\n", __func__,status,mask);
 	snd_soc_jack_report(jack, status, mask);
+#ifdef CONFIG_MACH_LGE //LGE Update // add switch dev for mbhc
+	{
+		status = status & ~SND_JACK_MECHANICAL;
+		if(mask == WCD_MBHC_JACK_MASK)
+		{
+			if (status == SND_JACK_HEADPHONE)
+			{
+				switch_set_state(&mbhc->sdev, LGE_HEADSET_NO_MIC);
+			}
+			else if(status == SND_JACK_HEADSET)
+			{
+				switch_set_state(&mbhc->sdev, LGE_HEADSET);
+			}
+			else if(status == 0)
+			{
+				switch_set_state(&mbhc->sdev, NO_DEVICE);
+			}
+			else
+			{
+				pr_debug("%s: not reported to switch_dev\n", __func__);
+			}
+		}
+	}
+#endif // add switch dev for mbhc
 }
 
 static void __hphocp_off_report(struct wcd_mbhc *mbhc, u32 jack_status,
@@ -159,6 +236,21 @@ static void wcd_enable_curr_micbias(const struct wcd_mbhc *mbhc,
 
 	switch (cs_mb_en) {
 	case WCD_MBHC_EN_CS:
+#ifdef CONFIG_LGE_ENABLE_HDSET_MIC_BIAS_FOR_MITS
+        if(lge_mbhc_check_factory_boot_mode()){
+            /* enable FSM */
+            snd_soc_update_bits(mbhc->codec,
+                0x151, /*MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,*/
+                0xB0, 0x80);
+            /* Disable PULL_UP_EN & enable MICBIAS */
+            snd_soc_update_bits(mbhc->codec,
+                0x144, /*MSM8X16_WCD_A_ANALOG_MICB_2_EN,*/
+                0xC0, 0x80);
+            /* Program Button threshold registers as per MICBIAS */
+            wcd_program_btn_threshold(mbhc, true);
+            break;
+        }
+#endif
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_MICB_CTRL, 0);
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 3);
 		/* Program Button threshold registers as per CS */
@@ -526,6 +618,9 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 	pr_debug("%s: enter insertion %d hph_status %x\n",
 		 __func__, insertion, mbhc->hph_status);
+	pr_info("[LGE MBHC] %s is %s. jack_type=%x\n",
+				(jack_type-1)?"4 Pin Headset":"3 Pin Headphone",
+				insertion?"Inserted":"Removed", jack_type);
 	if (!insertion) {
 		/* Report removal */
 		mbhc->hph_status &= ~jack_type;
@@ -752,6 +847,11 @@ static int wcd_check_cross_conn(struct wcd_mbhc *mbhc)
 	s16 reg1;
 	bool hphl_sch_res, hphr_sch_res;
 
+#ifdef CONFIG_MACH_LGE
+	//LGE update disable wcd swap check
+	pr_debug("%s: disable ", __func__);
+		return false;
+#endif
 	if (wcd_swch_level_remove(mbhc)) {
 		pr_debug("%s: Switch level is low\n", __func__);
 		return -EINVAL;
@@ -1007,6 +1107,18 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 			plug_type = MBHC_PLUG_TYPE_INVALID;
 	}
 
+#ifdef CONFIG_MACH_LGE 	/* Add to detect apple headset fast & detect AUX cable as 4 pin headset */
+	if (plug_type == MBHC_PLUG_TYPE_HIGH_HPH && (!det_extn_cable_en)) {
+		pr_info("[LGE MBHC] %s: Apple headset or AUX cable is found. Force 4pin Headset. plug_type:0x%x, hs_comp_res;%d\n",
+                __func__, plug_type, hs_comp_res);
+
+		mbhc->micbias_enable = true;
+		plug_type = MBHC_PLUG_TYPE_HEADSET;
+
+		goto report;
+	}
+#endif
+
 	pr_debug("%s: Valid plug found, plug type is %d\n",
 			 __func__, plug_type);
 	if (plug_type == MBHC_PLUG_TYPE_HEADSET ||
@@ -1124,9 +1236,15 @@ correct_plug_type:
 		WCD_MBHC_REG_READ(WCD_MBHC_HPHL_SCHMT_RESULT, hphl_sch);
 		WCD_MBHC_REG_READ(WCD_MBHC_MIC_SCHMT_RESULT, mic_sch);
 		if (hs_comp_res && !(hphl_sch || mic_sch)) {
+#ifdef CONFIG_MACH_LGE	/* LGE UPDATE : detect as 4Pin and then HIGH_HPH. Force 4Pin Headset */
+			pr_info("[LGE MBHC] detect as 4Pin and then HIGH_HPH. Force 4Pin Headset.\n");
+			plug_type = MBHC_PLUG_TYPE_HEADSET;
+			wrk_complete = false;
+#else	/* Qualcomm Orig. */
 			pr_debug("%s: cable is extension cable\n", __func__);
 			plug_type = MBHC_PLUG_TYPE_HIGH_HPH;
 			wrk_complete = true;
+#endif
 		} else {
 			pr_debug("%s: cable might be headset: %d\n", __func__,
 					plug_type);
@@ -1209,7 +1327,7 @@ exit:
 static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 {
 	struct snd_soc_codec *codec = mbhc->codec;
-	enum wcd_mbhc_plug_type plug_type;
+	enum wcd_mbhc_plug_type plug_type = MBHC_PLUG_TYPE_NONE;
 	bool micbias1 = false;
 	int cross_conn;
 	int try = 0;
@@ -1407,6 +1525,30 @@ static int wcd_mbhc_get_button_mask(struct wcd_mbhc *mbhc)
 	btn = mbhc->mbhc_cb->map_btn_code_to_num(mbhc->codec);
 
 	switch (btn) {
+#ifdef CONFIG_MACH_LGE
+	case 0:
+		pr_info("[LGE MBHC] buttons 0(mask 0) are pressed.\n");
+		mask = SND_JACK_BTN_0;
+		break;
+	case 1:
+		pr_info("[LGE MBHC] buttons 1(mask 1) are pressed.\n");
+		mask = SND_JACK_BTN_1;
+		break;
+	case 2:
+		pr_info("[LGE MBHC] buttons 2(mask 3) are pressed.\n");
+		mask = SND_JACK_BTN_2;
+		break;
+	case 3:
+		pr_info("[LGE MBHC] buttons 3(mask 7) are pressed.\n");
+		mask = SND_JACK_BTN_3;
+		break;
+	case 4:
+		pr_info("[LGE MBHC] buttons 4(mask 15) are not pressed.\n");
+		break;
+	default:
+		pr_info("[LGE MBHC] SND_JACK_BTN_default : do not use this button.\n");
+		break;
+#else
 	case 0:
 		mask = SND_JACK_BTN_0;
 		break;
@@ -1433,6 +1575,7 @@ static int wcd_mbhc_get_button_mask(struct wcd_mbhc *mbhc)
 		break;
 	default:
 		break;
+#endif
 	}
 
 	return mask;
@@ -1681,6 +1824,7 @@ static bool wcd_mbhc_fw_validate(const void *data, size_t size)
 static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 {
 	struct wcd_mbhc *mbhc = data;
+	// u16 result1;	// build error
 	int mask;
 	unsigned long msec_val;
 
@@ -1714,7 +1858,18 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 				__func__);
 		goto done;
 	}
+#ifndef CONFIG_MACH_LGE	// build error
+	result1 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MBHC_BTN_RESULT);
+	mask = wcd_mbhc_get_button_mask(result1);
+
+	/* [LGE] Do not report btn press except for BTN 0,1,2,3 */
+	if (!mask) {
+		pr_info("[LGE MBHC] Unsupported button event, ignore button press.\n");
+		goto done;
+	}
+#else
 	mask = wcd_mbhc_get_button_mask(mbhc);
+#endif
 	mbhc->buttons_pressed |= mask;
 	mbhc->mbhc_cb->lock_sleep(mbhc, true);
 	if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
@@ -1753,6 +1908,10 @@ static irqreturn_t wcd_mbhc_release_handler(int irq, void *data)
 	 * headset not headphone.
 	 */
 	if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADPHONE) {
+#ifdef CONFIG_MACH_LGE // LGE_UPDATE 4pol button icon issue
+		wcd_mbhc_report_plug(mbhc, 0, SND_JACK_HEADPHONE);
+		mbhc->current_plug = MBHC_PLUG_TYPE_HEADSET;
+#endif // LGE_UPDATE
 		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_HEADSET);
 		goto exit;
 
@@ -1785,7 +1944,15 @@ static irqreturn_t wcd_mbhc_release_handler(int irq, void *data)
 		mbhc->buttons_pressed &= ~WCD_MBHC_JACK_BUTTON_MASK;
 	}
 exit:
-	pr_debug("%s: leave\n", __func__);
+	pr_info("%s: leave\n", __func__);
+
+#ifdef CONFIG_MACH_LGE
+    if( wake_lock_active(&mbhc->btn_release_wake_lock) )
+        wake_unlock(&mbhc->btn_release_wake_lock);
+
+    wake_lock_timeout(&mbhc->btn_release_wake_lock, msecs_to_jiffies(WCD_BTN_RELEASE_WAKE_LOCK_MS));
+#endif  // CONFIG_MACH_LGE
+
 	WCD_MBHC_RSC_UNLOCK(mbhc);
 	return IRQ_HANDLED;
 }
@@ -2190,7 +2357,32 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 				__func__);
 			return ret;
 		}
-
+#ifdef CONFIG_MACH_LGE //LGE Update
+		ret = snd_jack_set_key(mbhc->button_jack.jack,
+				       SND_JACK_BTN_1,
+				       KEY_VOICECOMMAND);
+		if (ret) {
+			pr_err("%s: Failed to set code for btn-1:%d\n",
+					__func__, ret);
+			return ret;
+		}
+		ret = snd_jack_set_key(mbhc->button_jack.jack,
+				       SND_JACK_BTN_2,
+				       KEY_VOLUMEUP);
+		if (ret) {
+			pr_err("%s: Failed to set code for btn-2:%d\n",
+				__func__, ret);
+			return ret;
+		}
+		ret = snd_jack_set_key(mbhc->button_jack.jack,
+				       SND_JACK_BTN_3,
+				       KEY_VOLUMEDOWN);
+		if (ret) {
+			pr_err("%s: Failed to set code for btn-3:%d\n",
+				__func__, ret);
+			return ret;
+		}
+#endif
 		set_bit(INPUT_PROP_NO_DUMMY_RELEASE,
 			mbhc->button_jack.jack->input_dev->propbit);
 
@@ -2198,6 +2390,19 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 				  wcd_mbhc_fw_read);
 		INIT_DELAYED_WORK(&mbhc->mbhc_btn_dwork, wcd_btn_lpress_fn);
 	}
+#ifdef CONFIG_MACH_LGE //LGE Update // add switch dev for mbhc
+		{
+			mbhc->sdev.name = "h2w";
+			mbhc->sdev.print_state = lge_hsd_print_state;
+			mbhc->sdev.print_name = lge_hsd_print_name;
+
+			ret = switch_dev_register(&mbhc->sdev);
+			if (ret < 0) {
+				pr_err("[MBHC]Failed to register switch device\n");
+				switch_dev_unregister(&mbhc->sdev);
+			}
+		}
+#endif //LGE Update // add switch dev for mbhc
 	mutex_init(&mbhc->hphl_pa_lock);
 	mutex_init(&mbhc->hphr_pa_lock);
 
@@ -2288,6 +2493,10 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 		goto err_hphr_ocp_irq;
 	}
 
+#ifdef CONFIG_MACH_LGE
+    wake_lock_init(&mbhc->btn_release_wake_lock, WAKE_LOCK_SUSPEND, "wcd_btn_release_wake_lock");
+#endif  // CONFIG_MACH_LGE
+
 	pr_debug("%s: leave ret %d\n", __func__, ret);
 	return ret;
 
@@ -2328,9 +2537,21 @@ void wcd_mbhc_deinit(struct wcd_mbhc *mbhc)
 	mbhc->mbhc_cb->free_irq(codec, mbhc->intr_ids->mbhc_hs_rem_intr, mbhc);
 	mbhc->mbhc_cb->free_irq(codec, mbhc->intr_ids->hph_left_ocp, mbhc);
 	mbhc->mbhc_cb->free_irq(codec, mbhc->intr_ids->hph_right_ocp, mbhc);
+#ifdef CONFIG_MACH_LGE //LGE Update // add switch dev for mbhc
+	//switch_dev_unregister(&mbhc->sdev);
+	if (mbhc->sdev.name){
+	    switch_dev_unregister(&mbhc->sdev);
+		memset(&mbhc->sdev, 0, sizeof(struct switch_dev));
+
+	}
+#endif //LGE Update // add switch dev for mbhc
 	if (mbhc->mbhc_cb && mbhc->mbhc_cb->register_notifier)
 		mbhc->mbhc_cb->register_notifier(codec, &mbhc->nblock, false);
 	mutex_destroy(&mbhc->codec_resource_lock);
+
+#ifdef CONFIG_MACH_LGE
+    wake_lock_destroy(&mbhc->btn_release_wake_lock);
+#endif  // CONFIG_MACH_LGE
 }
 EXPORT_SYMBOL(wcd_mbhc_deinit);
 

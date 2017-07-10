@@ -765,13 +765,13 @@ enum iris_xfr_t {
 
 #undef FMDBG
 #ifdef FM_DEBUG
-#define FMDBG(fmt, args...) pr_info("iris_radio: " fmt, ##args)
+#define FMDBG(fmt, args...) pr_info("iris_radio: %s() " fmt, __func__, ##args)
 #else
 #define FMDBG(fmt, args...)
 #endif
 
 #undef FMDERR
-#define FMDERR(fmt, args...) pr_err("iris_radio: " fmt, ##args)
+#define FMDERR(fmt, args...) pr_err("iris_radio: %s() " fmt, __func__, ##args)
 
 /* Search options */
 enum search_t {

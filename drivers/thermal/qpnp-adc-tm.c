@@ -217,6 +217,9 @@ struct qpnp_adc_tm_chip {
 	struct work_struct		trigger_high_thr_work;
 	struct work_struct		trigger_low_thr_work;
 	struct qpnp_adc_tm_sensor	sensor[0];
+#ifdef CONFIG_LGE_USB_G_MSM_OTG_ENABLE
+	bool   				usb_id_no_pull;
+#endif
 };
 
 LIST_HEAD(qpnp_adc_tm_device_list);
@@ -1879,6 +1882,7 @@ static void qpnp_adc_tm_high_thr_work(struct work_struct *work)
 	return;
 }
 
+#ifndef CONFIG_LGE_PM
 static irqreturn_t qpnp_adc_tm_high_thr_isr(int irq, void *data)
 {
 	struct qpnp_adc_tm_chip *chip = data;
@@ -1895,6 +1899,7 @@ static irqreturn_t qpnp_adc_tm_high_thr_isr(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 static void qpnp_adc_tm_low_thr_work(struct work_struct *work)
 {
@@ -1909,6 +1914,7 @@ static void qpnp_adc_tm_low_thr_work(struct work_struct *work)
 	return;
 }
 
+#ifndef CONFIG_LGE_PM
 static irqreturn_t qpnp_adc_tm_low_thr_isr(int irq, void *data)
 {
 	struct qpnp_adc_tm_chip *chip = data;
@@ -1925,6 +1931,7 @@ static irqreturn_t qpnp_adc_tm_low_thr_isr(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 static int qpnp_adc_read_temp(struct thermal_zone_device *thermal,
 			     unsigned long *temp)
@@ -2119,8 +2126,25 @@ EXPORT_SYMBOL(qpnp_adc_tm_disable_chan_meas);
 int32_t qpnp_adc_tm_usbid_configure(struct qpnp_adc_tm_chip *chip,
 				struct qpnp_adc_tm_btm_param *param)
 {
+	int32_t result = 0;
+#ifdef CONFIG_LGE_USB_G_MSM_OTG_ENABLE
+	if (chip->usb_id_no_pull)
+	{
+		pr_err("tm_usbid_configure p_mux1_1_1\n");
+		param->channel = P_MUX1_1_1;
+	}
+	else
+	{
+#endif
 	param->channel = LR_MUX10_PU2_AMUX_USB_ID_LV;
-	return qpnp_adc_tm_channel_measure(chip, param);
+#ifdef CONFIG_LGE_USB_G_MSM_OTG_ENABLE
+		pr_err("pu2_amux\n");
+	}
+#endif
+	result = qpnp_adc_tm_channel_measure(chip, param);
+	pr_err("result = %d\n", result);
+
+	return result;
 }
 EXPORT_SYMBOL(qpnp_adc_tm_usbid_configure);
 
@@ -2336,6 +2360,10 @@ static int qpnp_adc_tm_probe(struct spmi_device *spmi)
 		goto fail;
 	}
 
+#ifdef CONFIG_LGE_USB_G_MSM_OTG_ENABLE
+	chip->usb_id_no_pull = of_property_read_bool(node,"usb-id-no-pull");
+#endif
+#ifndef CONFIG_LGE_PM
 	rc = devm_request_irq(&spmi->dev, chip->adc->adc_high_thr_irq,
 				qpnp_adc_tm_high_thr_isr,
 		IRQF_TRIGGER_RISING, "qpnp_adc_tm_high_interrupt", chip);
@@ -2355,6 +2383,7 @@ static int qpnp_adc_tm_probe(struct spmi_device *spmi)
 	} else {
 		enable_irq_wake(chip->adc->adc_low_thr_irq);
 	}
+#endif
 
 	dev_set_drvdata(&spmi->dev, chip);
 	list_add(&chip->list, &qpnp_adc_tm_device_list);

@@ -47,6 +47,8 @@
 #include <linux/msm-bus-board.h>
 #include <soc/qcom/scm.h>
 
+#include <mach/board_lge.h>
+
 #include "mdss.h"
 #include "mdss_fb.h"
 #include "mdss_mdp.h"
@@ -61,6 +63,9 @@ EXPORT_SYMBOL(mdp_drm_intr_mask);
 #define CREATE_TRACE_POINTS
 #include "mdss_mdp_trace.h"
 
+#ifdef CONFIG_LGE_DISPLAY_VSYNC_SKIP
+#include "lge/common/vsync_skip.h"
+#endif
 #define AXI_HALT_TIMEOUT_US	0x4000
 #define AUTOSUSPEND_TIMEOUT_MS	50
 
@@ -1450,15 +1455,87 @@ static DEVICE_ATTR(caps, S_IRUGO, mdss_mdp_show_capabilities, NULL);
 static DEVICE_ATTR(bw_mode_bitmap, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		mdss_mdp_store_max_limit_bw);
 
+#ifdef CONFIG_LGE_DISPLAY_VSYNC_SKIP
+static DEVICE_ATTR(vfps, 0644, fps_show, fps_store);
+static DEVICE_ATTR(vfps_ratio, 0644, fps_ratio_show, NULL);
+static DEVICE_ATTR(vfps_fcnt, 0644, fps_fcnt_show, NULL);
+#endif
+
 static struct attribute *mdp_fs_attrs[] = {
 	&dev_attr_caps.attr,
-	&dev_attr_bw_mode_bitmap.attr,
+#ifdef CONFIG_LGE_DISPLAY_VSYNC_SKIP
+	&dev_attr_vfps.attr,
+	&dev_attr_vfps_ratio.attr,
+	&dev_attr_vfps_fcnt.attr,
+#endif
 	NULL
 };
 
 static struct attribute_group mdp_fs_attr_group = {
 	.attrs = mdp_fs_attrs
 };
+
+#if defined(CONFIG_LGE_BW_CLK_TUNING)
+static ssize_t clk_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	sscanf(buf, "%d %d", &mdss_res->clk_factor.numer, &mdss_res->clk_factor.denom);
+	return count;
+}
+
+static ssize_t clk_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int r;
+	r = snprintf(buf, PAGE_SIZE, "clock factor : %d %d\n", mdss_res->clk_factor.numer, mdss_res->clk_factor.denom);
+	return r;
+}
+
+static ssize_t ab_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	sscanf(buf, "%d %d", &mdss_res->ab_factor.numer, &mdss_res->ab_factor.denom);
+	return count;
+}
+
+static ssize_t ab_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int r;
+	r = snprintf(buf, PAGE_SIZE, "ab factor : %d %d\n", mdss_res->ab_factor.numer, mdss_res->ab_factor.denom);
+	return r;
+}
+
+static ssize_t ib_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	sscanf(buf, "%d %d", &mdss_res->ib_factor.numer, &mdss_res->ib_factor.denom);
+	return count;
+}
+
+static ssize_t ib_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int r;
+	r = snprintf(buf, PAGE_SIZE, "ib factor : %d %d\n", mdss_res->ib_factor.numer, mdss_res->ib_factor.denom);
+	return r;
+}
+
+static DEVICE_ATTR(clk, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, clk_show, clk_store);
+static DEVICE_ATTR(ab, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, ab_show, ab_store);
+static DEVICE_ATTR(ib, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH, ib_show, ib_store);
+
+static struct attribute *mdp_tuning_attrs[] = {
+	&dev_attr_ab.attr,
+	&dev_attr_ib.attr,
+	&dev_attr_clk.attr,
+	NULL
+};
+
+static struct attribute_group mdp_tuning_attr_group = {
+	.attrs = mdp_tuning_attrs
+};
+#endif
 
 static int mdss_mdp_register_sysfs(struct mdss_data_type *mdata)
 {
@@ -1467,6 +1544,15 @@ static int mdss_mdp_register_sysfs(struct mdss_data_type *mdata)
 
 	rc = sysfs_create_group(&dev->kobj, &mdp_fs_attr_group);
 
+#if defined(CONFIG_LGE_BW_CLK_TUNING)
+	if (rc) {
+		pr_err("error in create mdp_fs_attr_group\n");
+		return rc;
+	}
+	rc = sysfs_create_group(&dev->kobj, &mdp_tuning_attr_group);
+	if (rc)
+		pr_err("error in create mdp_tuning_attr_group\n");
+#endif
 	return rc;
 }
 
@@ -2770,6 +2856,13 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	mdata->ab_factor.denom = 1;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-ab-factor",
 		&mdata->ab_factor);
+#ifdef CONFIG_LGE_MANUAL_FUDGE_FACTOR
+	if(lge_get_boot_mode() == LGE_BOOT_MODE_CHARGERLOGO)
+	{
+		mdata->ab_factor.numer = 2;
+		mdata->ab_factor.denom = 1;
+	}
+#endif
 
 	/*
 	 * 1.2 factor on ib as default value. This value is
@@ -2806,6 +2899,13 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	mdata->clk_factor.denom = 1;
 	mdss_mdp_parse_dt_fudge_factors(pdev, "qcom,mdss-clk-factor",
 		&mdata->clk_factor);
+#ifdef CONFIG_LGE_MANUAL_FUDGE_FACTOR
+	if(lge_get_boot_mode() == LGE_BOOT_MODE_CHARGERLOGO)
+	{
+		mdata->clk_factor.numer = 2;
+		mdata->clk_factor.denom = 1;
+	}
+#endif
 
 	rc = of_property_read_u32(pdev->dev.of_node,
 			"qcom,max-bandwidth-low-kbps", &mdata->max_bw_low);

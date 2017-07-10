@@ -158,9 +158,8 @@ struct fuse_file {
 	/** Has flock been performed on this file? */
 	bool flock:1;
 
-	/* the read write file */
-	struct file *rw_lower_file;
-	bool shortcircuit_enabled;
+    /* the read write file */
+    struct file *rw_lower_file;
 };
 
 /** One input argument of a request */
@@ -366,8 +365,8 @@ struct fuse_req {
 	/** Request is stolen from fuse_file->reserved_req */
 	struct file *stolen_file;
 
-	/** fuse shortcircuit file  */
-	struct file *private_lower_rw_file;
+    /** fuse shortcircuit file  */
+    struct file *private_lower_rw_file;
 };
 
 /**

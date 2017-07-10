@@ -64,10 +64,7 @@ struct fuse_file *fuse_file_alloc(struct fuse_conn *fc)
 	if (unlikely(!ff))
 		return NULL;
 
-	ff->rw_lower_file = NULL;
-	ff->shortcircuit_enabled = 0;
-	if (fc->shortcircuit_io)
-		ff->shortcircuit_enabled = 1;
+    ff->rw_lower_file = NULL;
 	ff->fc = fc;
 	ff->reserved_req = fuse_request_alloc(0);
 	if (unlikely(!ff->reserved_req)) {
@@ -972,10 +969,10 @@ out:
 static ssize_t fuse_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 				  unsigned long nr_segs, loff_t pos)
 {
-	ssize_t ret_val;
+    ssize_t ret_val;
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	struct fuse_conn *fc = get_fuse_conn(inode);
-	struct fuse_file *ff = iocb->ki_filp->private_data;
+    struct fuse_file *ff = iocb->ki_filp->private_data;
 
 	/*
 	 * In auto invalidate mode, always update attributes on read.
@@ -990,12 +987,12 @@ static ssize_t fuse_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 			return err;
 	}
 
-	if (ff && ff->shortcircuit_enabled && ff->rw_lower_file)
-		ret_val = fuse_shortcircuit_aio_read(iocb, iov, nr_segs, pos);
-	else
-		ret_val = generic_file_aio_read(iocb, iov, nr_segs, pos);
+    if (ff && ff->rw_lower_file)
+        ret_val = fuse_shortcircuit_aio_read(iocb, iov, nr_segs, pos);
+    else
+        ret_val = generic_file_aio_read(iocb, iov, nr_segs, pos);
 
-	return ret_val;
+    return ret_val;
 }
 
 static void fuse_write_fill(struct fuse_req *req, struct fuse_file *ff,
@@ -1280,23 +1277,23 @@ static ssize_t fuse_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	if (err)
 		goto out;
 
-	if (ff && ff->shortcircuit_enabled && ff->rw_lower_file) {
-		/* Use iocb->ki_pos instead of pos to handle the cases of files
-		 * that are opened with O_APPEND. For example if multiple
-		 * processes open the same file with O_APPEND then the
-		 * iocb->ki_pos will not be equal to the new pos value that is
-		 * updated with the file size(to guarantee appends even when
-		 * the file has grown due to the writes by another process).
-		 * We should use iocb->pos here since the lower filesystem
-		 * is expected to adjust for O_APPEND anyway and may need to
-		 * adjust the size for the file changes that occur due to
-		 * some processes writing directly to the lower filesystem
-		 * without using fuse.
-		 */
-		written = fuse_shortcircuit_aio_write(iocb, iov, nr_segs,
-							iocb->ki_pos);
-		goto out;
-	}
+    if (ff && ff->rw_lower_file) {
+        /* Use iocb->ki_pos instead of pos to handle the cases of files
+         * that are opened with O_APPEND. For example if multiple
+         * processes open the same file with O_APPEND then the
+         * iocb->ki_pos will not be equal to the new pos value that is
+         * updated with the file size(to guarantee appends even when
+         * the file has grown due to the writes by another process).
+         * We should use iocb->pos here since the lower filesystem
+         * is expected to adjust for O_APPEND anyway and may need to
+         * adjust the size for the file changes that occur due to
+         * some processes writing directly to the lower filesystem
+         * without using fuse.
+         */
+        written = fuse_shortcircuit_aio_write(iocb, iov, nr_segs,
+                                              iocb->ki_pos);
+        goto out;
+    }
 
 	if (file->f_flags & O_DIRECT) {
 		written = generic_file_direct_write(iocb, iov, &nr_segs,

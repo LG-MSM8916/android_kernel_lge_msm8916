@@ -41,6 +41,7 @@
 #include <linux/dma-removed.h>
 #include <linux/delay.h>
 #include <trace/events/kmem.h>
+#include <linux/delay.h>
 
 struct cma {
 	unsigned long	base_pfn;
@@ -74,6 +75,9 @@ static struct cma_map {
 static unsigned cma_map_count __initdata;
 static bool allow_memblock_alloc __initdata;
 
+#if defined(CONFIG_MACH_MSM8916_C70W_SKT_KR ) || defined(CONFIG_MACH_MSM8916_C70W_KT_KR) || defined(CONFIG_MACH_MSM8916_C70W_LGU_KR)
+extern int compare_revision(const char *revision);
+#endif
 static struct cma *cma_get_area(phys_addr_t base)
 {
 	int i;
@@ -232,7 +236,16 @@ int __init cma_fdt_scan(unsigned long node, const char *uname,
 	unsigned long addr_cells = dt_root_addr_cells;
 	phys_addr_t limit = MEMBLOCK_ALLOC_ANYWHERE;
 	const char *status;
+#if defined(CONFIG_MACH_MSM8916_C70W_SKT_KR ) || defined(CONFIG_MACH_MSM8916_C70W_KT_KR) || defined(CONFIG_MACH_MSM8916_C70W_LGU_KR)
+	const char *revision = NULL;
 
+	revision = of_get_flat_dt_prop(node, "revision", NULL);
+	if (revision)
+	{
+	    if(!compare_revision(revision))
+		return 0;
+	}
+#endif
 	if (!of_get_flat_dt_prop(node, "linux,reserve-contiguous-region", NULL))
 		return 0;
 

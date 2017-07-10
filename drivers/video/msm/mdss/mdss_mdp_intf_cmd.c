@@ -893,6 +893,13 @@ int mdss_mdp_cmd_intfs_stop(struct mdss_mdp_ctl *ctl, int session,
 	ctx->intf_stopped = 1;
 	spin_lock_irqsave(&ctx->clk_lock, flags);
 	if (ctx->rdptr_enabled) {
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+	if ((ctl->panel_data->panel_info.lge_pan_info.lge_panel_send_off_cmd == false)
+		&& (atomic_read(&ctx->koff_cnt) == 0)){
+			pr_info("%s: no kickoff cnt, no need to wait \n", __func__);
+			mdss_mdp_irq_disable(MDSS_MDP_IRQ_PING_PONG_RD_PTR,ctx->pp_num);
+			ctx->rdptr_enabled = 0;
+	}else {
 		INIT_COMPLETION(ctx->stop_comp);
 		need_wait = 1;
 		/*
@@ -900,6 +907,16 @@ int mdss_mdp_cmd_intfs_stop(struct mdss_mdp_ctl *ctl, int session,
 		 * next vsync if there has no kickoff pending
 		 */
 		ctx->rdptr_enabled = 1;
+	}
+#else
+		INIT_COMPLETION(ctx->stop_comp);
+		need_wait = 1;
+		/*
+		 * clk off at next vsync after pp_done  OR
+		 * next vsync if there has no kickoff pending
+		 */
+		ctx->rdptr_enabled = 1;
+#endif
 	}
 	spin_unlock_irqrestore(&ctx->clk_lock, flags);
 
