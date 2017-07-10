@@ -249,6 +249,15 @@ struct mdss_data_type {
 	int handoff_pending;
 	bool idle_pc;
 	struct mdss_perf_tune perf_tune;
+#ifdef CONFIG_LGE_VSYNC_SKIP
+	char enable_skip_vsync;
+	ulong skip_value;
+	ulong weight;
+	ulong bucket;
+	ulong skip_count;
+	int skip_ratio;
+	bool skip_first;
+#endif
 	bool traffic_shaper_en;
 	int iommu_ref_cnt;
 	u32 latency_buff_per;
@@ -292,7 +301,6 @@ struct mdss_util_intf {
 	void (*bus_bandwidth_ctrl)(int enable);
 	int (*bus_scale_set_quota)(int client, u64 ab_quota, u64 ib_quota);
 	struct mdss_panel_cfg* (*panel_intf_type)(int intf_val);
-	int (*dyn_clk_gating_ctrl)(int enable);
 };
 
 struct mdss_util_intf *mdss_get_util_intf(void);

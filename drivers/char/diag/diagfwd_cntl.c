@@ -538,13 +538,21 @@ int diag_process_smd_cntl_read_data(struct diag_smd_info *smd_info, void *buf,
 	int header_len = sizeof(struct diag_ctrl_pkt_header_t);
 	uint8_t *ptr = buf;
 	struct diag_ctrl_pkt_header_t *ctrl_pkt = NULL;
-
+#ifdef CONFIG_LGE_DIAG_ENABLE
+	struct diag_ctrl_cmd_reg *reg = NULL;
+#endif
 	if (!smd_info || !buf || total_recd <= 0)
 		return -EIO;
 
 	while (read_len + header_len < total_recd) {
 		ctrl_pkt = (struct diag_ctrl_pkt_header_t *)ptr;
 		switch (ctrl_pkt->pkt_id) {
+#ifdef CONFIG_LGE_DIAG_ENABLE
+		case DIAG_CTRL_MSG_LGE_DIAG_ENABLE:
+			reg = (struct diag_ctrl_cmd_reg *)ptr;
+			set_diag_enable_status(reg->cmd_code);
+			break;
+#endif
 		case DIAG_CTRL_MSG_REG:
 			process_command_registration(ptr, ctrl_pkt->len,
 						     smd_info);

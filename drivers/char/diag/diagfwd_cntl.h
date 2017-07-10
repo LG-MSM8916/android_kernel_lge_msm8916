@@ -43,6 +43,9 @@
 #define DIAG_CTRL_MSG_SSID_RANGE_REPORT		24
 #define DIAG_CTRL_MSG_BUILD_MASK_REPORT		25
 #define DIAG_CTRL_MSG_DCI_HANDSHAKE_PKT		29
+#ifdef CONFIG_LGE_DIAG_ENABLE
+#define DIAG_CTRL_MSG_LGE_DIAG_ENABLE 100
+#endif
 
 /*
  * Feature Mask Definitions: Feature mask is used to sepcify Diag features
@@ -255,4 +258,7 @@ int diag_send_buffering_wm_values(struct diag_smd_info *smd_info,
 				  struct diag_buffering_mode_t *params);
 void diag_cntl_stm_notify(struct diag_smd_info *smd_info, int action);
 
+#ifdef CONFIG_LGE_DIAG_ENABLE
+int set_diag_enable_status(int enable);
+#endif
 #endif

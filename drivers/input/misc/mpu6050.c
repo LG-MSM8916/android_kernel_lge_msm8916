@@ -3046,6 +3046,8 @@ static int mpu6050_probe(struct i2c_client *client,
 	sensor->gyro_poll_ms = MPU6050_GYRO_DEFAULT_POLL_INTERVAL_MS;
 	sensor->acc_use_cal = false;
 
+	input_set_events_per_packet(sensor->accel_dev, 100);
+	input_set_events_per_packet(sensor->gyro_dev, 100);
 	input_set_capability(sensor->accel_dev, EV_ABS, ABS_MISC);
 	input_set_capability(sensor->gyro_dev, EV_ABS, ABS_MISC);
 	input_set_abs_params(sensor->accel_dev, ABS_X,

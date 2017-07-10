@@ -44,6 +44,10 @@
 #include "trace.h"
 #include "trace_output.h"
 
+#if defined (CONFIG_MACH_MSM8916_PH1_SPR_US) || defined(CONFIG_MACH_MSM8916_PH1_CRK_US) || defined(CONFIG_MACH_MSM8916_K5)
+#define LGE_FTRACE_MAX_BUFFER_SIZE 16384
+#endif
+
 /*
  * On boot up, the ring buffer is set to the minimum size, so that
  * we do not waste memory on systems that are not using tracing.
@@ -4515,6 +4519,10 @@ tracing_entries_write(struct file *filp, const char __user *ubuf,
 	if (!val)
 		return -EINVAL;
 
+#if defined (CONFIG_MACH_MSM8916_PH1_SPR_US) || defined(CONFIG_MACH_MSM8916_PH1_CRK_US) || defined(CONFIG_MACH_MSM8916_K5)
+	if( val < LGE_FTRACE_MAX_BUFFER_SIZE)
+		val = LGE_FTRACE_MAX_BUFFER_SIZE;
+#endif
 	/* value is in KB */
 	val <<= 10;
 	ret = tracing_resize_ring_buffer(tr, val, tracing_get_cpu(inode));

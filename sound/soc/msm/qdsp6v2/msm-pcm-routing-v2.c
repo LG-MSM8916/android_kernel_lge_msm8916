@@ -80,13 +80,12 @@ enum {
 #define SLIMBUS_4_TX_TEXT "SLIMBUS_4_TX"
 #define SLIMBUS_5_TX_TEXT "SLIMBUS_5_TX"
 #define TERT_MI2S_TX_TEXT "TERT_MI2S_TX"
-#define QUAT_MI2S_TX_TEXT "QUAT_MI2S_TX"
 #define LSM_FUNCTION_TEXT "LSM Function"
 static const char * const mad_audio_mux_text[] = {
 	"None",
 	SLIMBUS_0_TX_TEXT, SLIMBUS_1_TX_TEXT, SLIMBUS_2_TX_TEXT,
 	SLIMBUS_3_TX_TEXT, SLIMBUS_4_TX_TEXT, SLIMBUS_5_TX_TEXT,
-	TERT_MI2S_TX_TEXT, QUAT_MI2S_TX_TEXT
+	TERT_MI2S_TX_TEXT
 };
 
 struct msm_pcm_route_bdai_pp_params {
@@ -222,6 +221,7 @@ struct msm_pcm_routing_bdai_data msm_bedais[MSM_BACKEND_DAI_MAX] = {
 	{ HDMI_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_HDMI},
 	{ INT_BT_SCO_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_SCO_RX},
 	{ INT_BT_SCO_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_SCO_TX},
+	{ INT_BT_A2DP_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_A2DP_RX},
 	{ INT_FM_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_FM_RX},
 	{ INT_FM_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_FM_TX},
 	{ RT_PROXY_PORT_001_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_AFE_PCM_RX},
@@ -270,7 +270,6 @@ struct msm_pcm_routing_bdai_data msm_bedais[MSM_BACKEND_DAI_MAX] = {
 	{ SLIMBUS_6_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_6_RX},
 	{ SLIMBUS_6_TX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SLIMBUS_6_TX},
 	{ AFE_PORT_ID_SPDIF_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_SPDIF_RX},
-	{ INT_BT_A2DP_RX, 0, 0, 0, 0, 0, 0, 0, LPASS_BE_INT_BT_A2DP_RX},
 };
 
 
@@ -742,9 +741,11 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 			acdb_dev_id = fe_dai_app_type_cfg[fedai_id].acdb_dev_id;
 			topology = msm_routing_get_adm_topology(path_type,
 								fedai_id);
+#ifndef CONFIG_SND_LGE_INCALL_RECORD_TUNE
 			if (msm_bedais[i].port_id == VOICE_RECORD_RX ||
 			    msm_bedais[i].port_id == VOICE_RECORD_TX)
 				topology = NULL_COPP_TOPOLOGY;
+#endif
 			copp_idx = adm_open(msm_bedais[i].port_id, path_type,
 					    sample_rate, channels, topology,
 					    perf_mode, bits_per_sample,
@@ -961,9 +962,11 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 
 			topology = msm_routing_get_adm_topology(path_type, val);
 			acdb_dev_id = fe_dai_app_type_cfg[val].acdb_dev_id;
+#ifndef CONFIG_SND_LGE_INCALL_RECORD_TUNE
 			if (msm_bedais[reg].port_id == VOICE_RECORD_RX ||
 			    msm_bedais[reg].port_id == VOICE_RECORD_TX)
 				topology = NULL_COPP_TOPOLOGY;
+#endif
 			copp_idx = adm_open(msm_bedais[reg].port_id, path_type,
 					    sample_rate, channels, topology,
 					    fdai->perf_mode, bits_per_sample,
@@ -1320,9 +1323,6 @@ static int msm_routing_lsm_mux_put(struct snd_kcontrol *kcontrol,
 	case 7:
 		lsm_port = AFE_PORT_ID_TERTIARY_MI2S_TX;
 		break;
-	case 8:
-		lsm_port = AFE_PORT_ID_QUATERNARY_MI2S_TX;
-		break;
 	default:
 		pr_err("Default lsm port");
 		break;
@@ -1365,10 +1365,6 @@ static int msm_routing_lsm_func_get(struct snd_kcontrol *kcontrol,
 	}
 
 	port_id = i * 2 + 1 + SLIMBUS_0_RX;
-	if (!strncmp(kcontrol->id.name, mad_audio_mux_text[8],
-			strlen(mad_audio_mux_text[8])))
-		port_id = AFE_PORT_ID_QUATERNARY_MI2S_TX;
-
 	mad_type = afe_port_get_mad_type(port_id);
 	pr_debug("%s: port_id 0x%x, mad_type %d\n", __func__, port_id,
 		 mad_type);
@@ -1440,9 +1436,6 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 		port_id = AFE_PORT_ID_TERTIARY_MI2S_TX;
 		mad_type = MAD_SW_AUDIO;
 	}
-	if (!strncmp(kcontrol->id.name, mad_audio_mux_text[8],
-			strlen(mad_audio_mux_text[8])))
-		port_id = AFE_PORT_ID_QUATERNARY_MI2S_TX;
 
 	pr_debug("%s: port_id 0x%x, mad_type %d\n", __func__, port_id,
 		 mad_type);
@@ -1580,6 +1573,10 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 		msm_route_ec_ref_rx = 7;
 		ec_ref_port_id = AFE_PORT_ID_SECONDARY_MI2S_RX;
 		break;
+	case 9:
+		msm_route_ec_ref_rx = 9;
+		ec_ref_port_id = INT_BT_SCO_RX;
+		break;
 	default:
 		msm_route_ec_ref_rx = 0; /* NONE */
 		pr_err("%s EC ref rx %ld not valid\n",
@@ -1597,9 +1594,9 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 
 static const char *const ec_ref_rx[] = { "None", "SLIM_RX", "I2S_RX",
 	"PRI_MI2S_TX", "SEC_MI2S_TX",
-	"TERT_MI2S_TX", "QUAT_MI2S_TX", "SEC_I2S_RX", "PROXY_RX"};
+	"TERT_MI2S_TX", "QUAT_MI2S_TX", "SEC_I2S_RX", "PROXY_RX", "INTERNAL_BT_SCO_RX"};
 static const struct soc_enum msm_route_ec_ref_rx_enum[] = {
-	SOC_ENUM_SINGLE_EXT(9, ec_ref_rx),
+	SOC_ENUM_SINGLE_EXT(10, ec_ref_rx),
 };
 
 static const struct snd_kcontrol_new ext_ec_ref_mux_ul1 =
@@ -3695,8 +3692,6 @@ static const struct snd_kcontrol_new lsm_function[] = {
 		     msm_routing_lsm_func_get, msm_routing_lsm_func_put),
 	SOC_ENUM_EXT(TERT_MI2S_TX_TEXT" "LSM_FUNCTION_TEXT, lsm_func_enum,
 		    msm_routing_lsm_func_get, msm_routing_lsm_func_put),
-	SOC_ENUM_EXT(QUAT_MI2S_TX_TEXT" "LSM_FUNCTION_TEXT, lsm_func_enum,
-		    msm_routing_lsm_func_get, msm_routing_lsm_func_put),
 };
 
 static const char * const aanc_slim_0_rx_text[] = {
@@ -3853,7 +3848,7 @@ static int msm_routing_put_app_type_cfg_control(struct snd_kcontrol *kcontrol,
 
 static const struct snd_kcontrol_new app_type_cfg_controls[] = {
 	SOC_SINGLE_MULTI_EXT("App Type Config", SND_SOC_NOPM, 0,
-	0x7FFFFFFF, 0, 128, msm_routing_get_app_type_cfg_control,
+	0xFFFFFFFF, 0, 128, msm_routing_get_app_type_cfg_control,
 	msm_routing_put_app_type_cfg_control),
 };
 
@@ -5513,7 +5508,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM1 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM1 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
 	{"LSM1 MUX", "TERT_MI2S_TX", "TERT_MI2S_TX"},
-	{"LSM1 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM1_UL_HL", NULL, "LSM1 MUX"},
 
 	{"LSM2 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
@@ -5522,7 +5516,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM2 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM2 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
 	{"LSM2 MUX", "TERT_MI2S_TX", "TERT_MI2S_TX"},
-	{"LSM2 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM2_UL_HL", NULL, "LSM2 MUX"},
 
 
@@ -5532,7 +5525,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM3 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM3 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
 	{"LSM3 MUX", "TERT_MI2S_TX", "TERT_MI2S_TX"},
-	{"LSM3 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM3_UL_HL", NULL, "LSM3 MUX"},
 
 
@@ -5542,7 +5534,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM4 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM4 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
 	{"LSM4 MUX", "TERT_MI2S_TX", "TERT_MI2S_TX"},
-	{"LSM4 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM4_UL_HL", NULL, "LSM4 MUX"},
 
 	{"LSM5 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
@@ -5551,7 +5542,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM5 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM5 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
 	{"LSM5 MUX", "TERT_MI2S_TX", "TERT_MI2S_TX"},
-	{"LSM5 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM5_UL_HL", NULL, "LSM5 MUX"},
 
 	{"LSM6 MUX", "SLIMBUS_0_TX", "SLIMBUS_0_TX"},
@@ -5559,7 +5549,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM6 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
 	{"LSM6 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM6 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
-	{"LSM6 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM6_UL_HL", NULL, "LSM6 MUX"},
 
 
@@ -5568,7 +5557,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM7 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
 	{"LSM7 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM7 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
-	{"LSM7 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM7_UL_HL", NULL, "LSM7 MUX"},
 
 
@@ -5577,7 +5565,6 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"LSM8 MUX", "SLIMBUS_3_TX", "SLIMBUS_3_TX"},
 	{"LSM8 MUX", "SLIMBUS_4_TX", "SLIMBUS_4_TX"},
 	{"LSM8 MUX", "SLIMBUS_5_TX", "SLIMBUS_5_TX"},
-	{"LSM8 MUX", "QUAT_MI2S_TX", "QUAT_MI2S_TX"},
 	{"LSM8_UL_HL", NULL, "LSM8 MUX"},
 
 
@@ -5946,9 +5933,11 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 			channels = bedai->channel;
 			acdb_dev_id = fe_dai_app_type_cfg[i].acdb_dev_id;
 			topology = msm_routing_get_adm_topology(path_type, i);
+#ifndef CONFIG_SND_LGE_INCALL_RECORD_TUNE
 			if (bedai->port_id == VOICE_RECORD_RX ||
 			    bedai->port_id == VOICE_RECORD_TX)
 				topology = NULL_COPP_TOPOLOGY;
+#endif
 			copp_idx = adm_open(bedai->port_id, path_type,
 					    sample_rate, channels, topology,
 					    fdai->perf_mode, bits_per_sample,

@@ -205,7 +205,11 @@ u32 mdss_mdp_calc_latency_buf_bytes(bool is_yuv, bool is_bwc,
 			latency_buf_bytes = src_w * bpp *
 				latency_lines;
 		} else {
+			#ifdef CONFIG_LGE_UNDERRUN
+			latency_lines = 3;
+			#else
 			latency_lines = 2;
+			#endif
 			latency_buf_bytes = mdss_mdp_align_latency_buf_bytes(
 				src_w * bpp * latency_lines,
 				use_latency_buf_percentage ?
@@ -2235,6 +2239,16 @@ int mdss_mdp_ctl_intf_event(struct mdss_mdp_ctl *ctl, int event, void *arg)
 	do {
 		if (pdata->event_handler)
 			rc = pdata->event_handler(pdata, event, arg);
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+		if(pdata->next){
+			pdata->next->panel_info.lge_pan_info.lge_panel_send_on_cmd =
+				pdata->panel_info.lge_pan_info.lge_panel_send_on_cmd;
+			pdata->next->panel_info.lge_pan_info.lge_panel_send_off_cmd =
+				pdata->panel_info.lge_pan_info.lge_panel_send_off_cmd;
+			pdata->next->panel_info.lge_pan_info.cur_panel_mode =
+				pdata->panel_info.lge_pan_info.cur_panel_mode;
+		}
+#endif
 		pdata = pdata->next;
 	} while (rc == 0 && pdata);
 

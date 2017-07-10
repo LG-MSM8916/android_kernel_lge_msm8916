@@ -1067,6 +1067,10 @@ static void ispif_process_irq(struct ispif_device *ispif,
 	if (out[vfe_id].ispifIrqStatus0 &
 			ISPIF_IRQ_STATUS_RDI0_SOF_MASK) {
 		ispif->sof_count[vfe_id].sof_cnt[RDI0]++;
+/* LGE_CHANGE_S, real frame counter, 2013-7-10, jonghwan.ko@lge.com */
+             if(ispif->sof_count[vfe_id].sof_cnt[RDI0] <10)
+				pr_err(" %s : %d \n",__func__,ispif->sof_count[vfe_id].sof_cnt[RDI0]);
+/* LGE_CHANGE_E, real frame counter, 2013-7-10, jonghwan.ko@lge.com */
 	}
 	if (out[vfe_id].ispifIrqStatus1 &
 			ISPIF_IRQ_STATUS_RDI1_SOF_MASK) {

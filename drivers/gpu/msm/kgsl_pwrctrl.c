@@ -35,6 +35,9 @@
 
 #define UPDATE_BUSY_VAL		1000000
 
+#ifdef CONFIG_LGE_PM_GOVERNOR_TUNING
+int game_level = 0 ;
+#endif
 /*
  * Expected delay for post-interrupt processing on A3xx.
  * The delay may be longer, gradually increase the delay
@@ -279,6 +282,10 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 	 * clocks come back
 	 */
 	pwr->active_pwrlevel = new_level;
+
+#ifdef CONFIG_LGE_PM_GOVERNOR_TUNING
+	game_level = new_level ;
+#endif
 
 	/*
 	 * Update the bus before the GPU clock to prevent underrun during

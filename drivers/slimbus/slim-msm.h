@@ -276,6 +276,7 @@ struct msm_slim_ctrl {
 	int			ipc_log_mask;
 	bool			sysfs_created;
 	void			*ipc_slimbus_log;
+	bool			int_mdm;
 };
 
 struct msm_sat_chan {

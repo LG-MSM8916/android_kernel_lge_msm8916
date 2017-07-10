@@ -54,6 +54,10 @@ static void msm_cci_set_clk_param(struct cci_device *cci_dev,
 	enum cci_i2c_master_t master = c_ctrl->cci_info->cci_i2c_master;
 	enum i2c_freq_mode_t i2c_freq_mode = c_ctrl->cci_info->i2c_freq_mode;
 
+	//LGE_CHANGE_S, i2c speed up for camera entrance time issue, 2014-07-02, jongkwon.chae@lge.com
+	i2c_freq_mode = I2C_FAST_MODE;
+	//LGE_CHANGE_E, i2c speed up for camera entrance time issue, 2014-07-02, jongkwon.chae@lge.com
+
 	if (cci_dev->master_clk_init[master])
 		return;
 	clk_params = &cci_dev->cci_clk_params[i2c_freq_mode];
@@ -740,7 +744,7 @@ static int32_t msm_cci_init(struct v4l2_subdev *sd,
 	cci_dev->reg_ptr = regulator_get(&(cci_dev->pdev->dev),
 					 "qcom,gdscr-vdd");
 	if (IS_ERR_OR_NULL(cci_dev->reg_ptr)) {
-		pr_err(" %s: Failed in getting TOP gdscr regulator handle",
+		pr_debug(" %s: Failed in getting TOP gdscr regulator handle",
 			__func__);
 	} else {
 		rc = regulator_enable(cci_dev->reg_ptr);

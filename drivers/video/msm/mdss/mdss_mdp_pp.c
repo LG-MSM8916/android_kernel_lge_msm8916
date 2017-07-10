@@ -22,6 +22,13 @@
 #include <linux/delay.h>
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
+#if defined(CONFIG_LCD_KCAL)
+#include <mach/board_lge.h>
+extern int g_kcal_r;
+extern int g_kcal_g;
+extern int g_kcal_b;
+extern struct kcal_data kcal_value;
+#endif
 
 struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 	[MDSS_MDP_CSC_RGB2RGB] = {
@@ -73,6 +80,78 @@ struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 	},
 };
+
+#if defined(CONFIG_LGE_BROADCAST_TDMB)
+struct mdp_csc_cfg dmb_csc_convert = {
+#if defined(CONFIG_MACH_MSM8916_PH1_KR)
+	0,
+	{
+		0x0254, 0x0000, 0x0331,
+		0x0254, 0xff37, 0xfe60,
+		0x0254, 0x0409, 0x0000,
+	},
+	{ 0xfff0, 0xff80, 0xff80,},
+	{ 0x0, 0x0, 0x0,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#elif defined(CONFIG_MACH_MSM8916_G4STYLUSW_KT_KR)
+	0,
+	{
+		0x0236, 0x0000, 0x0331, /* 283 */
+		0x0244, 0xff37, 0xfe60, /* 290 */
+		0x0276, 0x0409, 0x0000, /* 315 */
+	},
+	{ 0xfff0, 0xff80, 0xff80,},
+	{ 0x0, 0x0, 0x0,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#elif defined(CONFIG_MACH_MSM8916_YG_SKT_KR)
+	0,
+	{
+		0x0230, 0x0000, 0x0331, /* 280 */
+		0x0244, 0xff37, 0xfe60, /* 290 */
+		0x0254, 0x0409, 0x0000, /* 298 */
+	},
+	{ 0xfff0, 0xff80, 0xff80,},
+	{ 0x0, 0x0, 0x0,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#elif defined(CONFIG_MACH_MSM8916_C100N_KR)
+        0,
+        {
+                0x024c, 0x0000, 0x0331,
+                0x0250, 0xff37, 0xfe60,
+                0x0264, 0x0409, 0x0000,
+        },
+        { 0xfff0, 0xff80, 0xff80,},
+        { 0x0, 0x0, 0x0,},
+        { 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+        { 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#elif defined(CONFIG_MACH_MSM8916_M216N_KR)
+        0,
+        {
+                0x0232, 0x0000, 0x0331, /* 281 */
+                0x0250, 0xff37, 0xfe60, /* 296 */
+                0x0270, 0x0409, 0x0000, /* 312 */
+        },
+        { 0xfff0, 0xff80, 0xff80,},
+        { 0x0, 0x0, 0x0,},
+        { 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+        { 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#else
+	0,
+	{
+		0x0254, 0x0000, 0x0331,
+		0x0254, 0xff37, 0xfe60,
+		0x0254, 0x0409, 0x0000,
+	},
+	{ 0xfff0, 0xff80, 0xff80,},
+	{ 0x0, 0x0, 0x0,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#endif
+};
+#endif /* LGE_BROADCAST */
 
 /*
  * To program a linear LUT we need to make the slope to be 1/16 to enable
@@ -350,6 +429,14 @@ struct mdss_pp_res_type {
 
 static DEFINE_MUTEX(mdss_pp_mutex);
 static struct mdss_pp_res_type *mdss_pp_res;
+
+#if defined(CONFIG_LGE_BROADCAST_TDMB)
+static int dmb_status; // on - 1, off - 0
+int pp_set_dmb_status(int flag) {
+	dmb_status = flag;
+	return 0;
+}
+#endif /* LGE_BROADCAST */
 
 static u32 pp_hist_read(char __iomem *v_addr,
 				struct pp_hist_col_info *hist_info);
@@ -885,8 +972,16 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 			 * is a previously configured pipe need to re-configure
 			 * CSC matrix
 			 */
+#if !defined(CONFIG_LGE_BROADCAST_TDMB)
 			mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num,
 					   MDSS_MDP_CSC_YUV2RGB);
+#else
+			if(dmb_status == 1) {
+				mdss_mdp_csc_setup_data(MDSS_MDP_BLOCK_SSPP, pipe->num, &dmb_csc_convert);
+			} else {
+				mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num, MDSS_MDP_CSC_YUV2RGB);
+			}
+#endif /* LGE_BROADCAST */
 		}
 	}
 
@@ -2000,6 +2095,10 @@ int mdss_mdp_pp_resume(struct mdss_mdp_ctl *ctl, u32 dspp_num)
 			mdss_pp_res->gamut_disp_cfg[disp_num].flags |=
 				MDP_PP_OPS_WRITE;
 	}
+#if defined(CONFIG_LCD_KCAL)
+	if (disp_num == 0)
+		pp_sts.pgc_sts |= PP_STS_ENABLE;
+#endif
 	if (pp_sts.pgc_sts & PP_STS_ENABLE) {
 		flags |= PP_FLAGS_DIRTY_PGC;
 		if (!(mdss_pp_res->pgc_disp_cfg[disp_num].flags
@@ -2050,6 +2149,189 @@ int mdss_mdp_pp_resume(struct mdss_mdp_ctl *ctl, u32 dspp_num)
 
 	return 0;
 }
+#if defined(CONFIG_LCD_KCAL)
+#if defined(CONFIG_JDI_INCELL_VIDEO_FHD_PANEL)
+static struct mdp_ar_gc_lut_data test_r[GC_LUT_SEGMENTS] = {
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000100, 0x00000000},
+		{0x00000FFF, 0x00000000, 0x00007F80},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000}
+};
+
+static struct mdp_ar_gc_lut_data test_g[GC_LUT_SEGMENTS] = {
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000100, 0x00000000},
+		{0x00000FFF, 0x00000000, 0x00007F80},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000}
+};
+
+static struct mdp_ar_gc_lut_data test_b[GC_LUT_SEGMENTS] = {
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000100, 0x00000000},
+		{0x00000FFF, 0x00000000, 0x00007F80},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000},
+		{0x00000000, 0x00000000, 0x00000000}
+};
+#else
+static struct mdp_ar_gc_lut_data test_r[GC_LUT_SEGMENTS] =
+{
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000002, 0x000000FF, 0x00000000},
+	{0x00000FFF, 0x00000000, 0x00007F80},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000}
+};
+static struct mdp_ar_gc_lut_data test_g[GC_LUT_SEGMENTS] =
+{
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000002, 0x000000FF, 0x00000000},
+	{0x00000FFF, 0x00000000, 0x00007F80},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000}
+};
+static struct mdp_ar_gc_lut_data test_b[GC_LUT_SEGMENTS] =
+{
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000002, 0x000000FF, 0x00000000},
+	{0x00000FFF, 0x00000000, 0x00007F80},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000},
+	{0x00000000, 0x00000000, 0x00000000}
+};
+#endif
+void mdss_mdp_pp_argc(void)
+{
+	int disp_num = 0;
+	u32 tbl_size;
+	struct mdp_ar_gc_lut_data *r_data;
+	struct mdp_ar_gc_lut_data *g_data;
+	struct mdp_ar_gc_lut_data *b_data;
+	struct mdp_pgc_lut_data *pgc_config;
+	r_data = &mdss_pp_res->gc_lut_r[disp_num][0];
+	g_data = &mdss_pp_res->gc_lut_g[disp_num][0];
+	b_data = &mdss_pp_res->gc_lut_b[disp_num][0];
+	tbl_size = GC_LUT_SEGMENTS * sizeof(struct mdp_ar_gc_lut_data);
+	memcpy(r_data, test_r, tbl_size);
+	memcpy(g_data, test_g, tbl_size);
+	memcpy(b_data, test_b, tbl_size);
+	pgc_config = &mdss_pp_res->pgc_disp_cfg[disp_num];
+	pgc_config->r_data =
+		&mdss_pp_res->gc_lut_r[disp_num][0];
+	pgc_config->g_data =
+		&mdss_pp_res->gc_lut_g[disp_num][0];
+	pgc_config->b_data =
+		&mdss_pp_res->gc_lut_b[disp_num][0];
+	pgc_config->flags |= MDP_PP_OPS_WRITE;
+	pgc_config->flags |= MDP_PP_OPS_ENABLE;
+	pr_info(">>>>> %s \n", __func__);
+}
+#define NUM_QLUT 256
+#define MAX_KCAL_V (NUM_QLUT-1)
+#define SCALED_BY_KCAL(rgb, kcal) \
+	(((((unsigned int)(rgb) * (unsigned int)(kcal)) << 10) / \
+	  (unsigned int)MAX_KCAL_V) >> 10)
+void mdss_mdp_pp_argc_kcal(int kr, int kg, int kb)//struct mdss_mdp_ctl *ctl,
+{
+	int i;
+	int disp_num = 0;
+	struct mdp_pgc_lut_data *pgc_config;
+	for (i = 0; i < GC_LUT_SEGMENTS; i++) {
+		mdss_pp_res->gc_lut_r[disp_num][i].slope =
+			SCALED_BY_KCAL(test_r[i].slope, kr);
+		mdss_pp_res->gc_lut_r[disp_num][i].offset =
+			SCALED_BY_KCAL(test_r[i].offset, kr);
+		mdss_pp_res->gc_lut_g[disp_num][i].slope =
+			SCALED_BY_KCAL(test_g[i].slope, kg);
+		mdss_pp_res->gc_lut_g[disp_num][i].offset =
+			SCALED_BY_KCAL(test_g[i].offset, kg);
+		mdss_pp_res->gc_lut_b[disp_num][i].slope =
+			SCALED_BY_KCAL(test_b[i].slope, kb);
+		mdss_pp_res->gc_lut_b[disp_num][i].offset =
+			SCALED_BY_KCAL(test_b[i].offset, kb);
+	}
+	pgc_config = &mdss_pp_res->pgc_disp_cfg[disp_num];
+	pgc_config->flags |= MDP_PP_OPS_WRITE;
+	pgc_config->flags |= MDP_PP_OPS_ENABLE;
+	mdss_pp_res->pp_disp_flags[disp_num] |= PP_FLAGS_DIRTY_PGC;
+	pr_info(">>>>> %s \n", __func__);
+}
+int update_preset_lcdc_lut(void)
+{
+	int ret = 0;
+	printk("update_preset_lcdc_lut red=[%d], green=[%d], blue=[%d]\n", g_kcal_r, g_kcal_g, g_kcal_b);
+	mdss_mdp_pp_argc_kcal(g_kcal_r,g_kcal_g,g_kcal_b);
+	if (ret)
+		pr_err("%s: failed to set lut! %d\n", __func__, ret);
+	return ret;
+}
+#endif
 
 int mdss_mdp_pp_init(struct device *dev)
 {
@@ -2121,6 +2403,12 @@ int mdss_mdp_pp_init(struct device *dev)
 			init_completion(&vig[i].pp_res.hist.first_kick);
 		}
 	}
+#if defined(CONFIG_LCD_KCAL)
+	if (!ret) {
+		mdss_mdp_pp_argc();
+		update_preset_lcdc_lut();
+	}
+#endif
 exit_err:
 	mutex_unlock(&mdss_pp_mutex);
 	return ret;
@@ -4593,6 +4881,12 @@ ad_config_exit:
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+#if IS_ENABLED(CONFIG_BACKLIGHT_LM3697)
+    extern void lm3697_set_level_no_mapping(int bl_level);
+#endif
+#endif
+
 int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 			struct mdss_ad_input *input, int wait) {
 	int ret = 0;
@@ -4663,6 +4957,11 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 			MDSS_BRIGHT_TO_BL(bl, bl, mfd->panel_info->bl_max,
 					mfd->panel_info->brightness_max);
 			mdss_fb_set_backlight(mfd, bl);
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+#if IS_ENABLED(CONFIG_BACKLIGHT_LM3697)
+            lm3697_set_level_no_mapping(bl >> 4);  // downscaling from 12bits to 8bits
+#endif
+#endif
 			mutex_unlock(&mfd->bl_lock);
 			mutex_lock(&ad->lock);
 		} else {

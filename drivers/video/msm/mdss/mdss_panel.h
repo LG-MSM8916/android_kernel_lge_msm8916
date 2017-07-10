@@ -19,6 +19,10 @@
 #include <linux/types.h>
 #include <linux/debugfs.h>
 
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_CODE_REFACTORING)
+#include "lge/panel/oem_mdss_panel_info.h"
+#endif
+
 /* panel id type */
 struct panel_id {
 	u16 id;
@@ -104,13 +108,6 @@ enum {
 	MODE_GPIO_NOT_VALID = 0,
 	MODE_GPIO_HIGH,
 	MODE_GPIO_LOW,
-};
-enum dsi_lane_ids {
-	DSI_LANE_0,
-	DSI_LANE_1,
-	DSI_LANE_2,
-	DSI_LANE_3,
-	DSI_LANE_MAX,
 };
 
 struct mdss_rect {
@@ -303,7 +300,6 @@ struct mipi_panel_info {
 	char lp11_init;
 	u32  init_delay;
 	u32  post_init_delay;
-	u32  phy_lane_clamp_mask;	/*DSI physical lane clamp mask*/
 };
 
 struct edp_panel_info {
@@ -423,8 +419,21 @@ struct mdss_panel_info {
 	bool dynamic_switch_pending;
 	bool is_lpm_mode;
 	bool is_split_display;
-
+#if defined (CONFIG_MFD_DW8768) || defined (CONFIG_LGD_DONGBU_INCELL_VIDEO_HD_PANEL)
+	bool shutdown_pending;
+#endif
+#if defined(CONFIG_LGE_DIC_TRIPLE_DETECT)
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_CODE_REFACTORING)
+	int lg4895_revision;
+#else
+	int db7400_cut;
+#endif
+#endif
 	bool is_prim_panel;
+
+#ifdef CONFIG_LGE_MODULE_DETECT
+	int display_id;
+#endif
 
 	char panel_name[MDSS_MAX_PANEL_LEN];
 	struct mdss_mdp_pp_tear_check te;
@@ -437,6 +446,9 @@ struct mdss_panel_info {
 
 	/* debugfs structure for the panel */
 	struct mdss_panel_debugfs_info *debugfs_info;
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_CODE_REFACTORING)
+	struct lge_pan_info lge_pan_info;
+#endif
 };
 
 struct mdss_panel_data {

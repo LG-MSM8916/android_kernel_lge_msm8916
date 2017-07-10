@@ -30,6 +30,12 @@
 #include <sound/asound.h>
 #include "msm-dts-eagle.h"
 
+#define LVVE
+#if defined(LVVE)
+#define VPM_TX_SM_LVVEFQ    (0x1000BFF0)
+#define VPM_TX_DM_LVVEFQ    (0x1000BFF1)
+#endif
+
 #define TIMEOUT_MS 1000
 
 #define RESET_COPP_ID 99
@@ -1973,6 +1979,10 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	}
 
 	if ((topology == VPM_TX_SM_ECNS_COPP_TOPOLOGY) ||
+#if defined(LVVE)
+		(topology == VPM_TX_SM_LVVEFQ ) ||
+		(topology == VPM_TX_DM_LVVEFQ ) ||
+#endif
 	    (topology == VPM_TX_DM_FLUENCE_COPP_TOPOLOGY) ||
 	    (topology == VPM_TX_DM_RFECNS_COPP_TOPOLOGY))
 		rate = 16000;
@@ -2257,9 +2267,7 @@ int adm_matrix_map(int path, struct route_payload payload_map, int perf_mode)
 					    atomic_read(&this_adm.copp.id
 							[port_idx][copp_idx]),
 					    get_cal_path(path),
-					    payload_map.session_id,
-					    payload_map.app_type,
-					    payload_map.acdb_dev_id);
+					    payload_map.session_id);
 			send_adm_cal(payload_map.port_id[i], copp_idx,
 				     get_cal_path(path), perf_mode,
 				     payload_map.app_type,

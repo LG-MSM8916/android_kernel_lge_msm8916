@@ -182,6 +182,11 @@ int msm_isp_update_bandwidth(enum msm_isp_hw_client client,
 				isp_bandwidth_mgr.client_info[i].ib;
 		}
 	}
+	#ifdef CONFIG_LGE_UNDERRUN
+	if(path->vectors[0].ib <6400000000) {
+		path->vectors[0].ib = 6400000000;
+	}
+	#endif
 	ISP_DBG("%s: Total AB = %llu IB = %llu\n", __func__,
 			path->vectors[0].ab, path->vectors[0].ib);
 	msm_bus_scale_client_update_request(isp_bandwidth_mgr.bus_client,
@@ -1572,6 +1577,13 @@ static void msm_isp_process_overflow_irq(
 		get_overflow_mask(&overflow_mask);
 	overflow_mask &= *irq_status1;
 
+/*LGE_CHANGE_S, make overflow intentionally for debbuging, 2015-01-15, kwangsik83.kim@lge.com*/
+    if(vfe_dev->mk_overflow == 1){
+		overflow_mask = 1;
+		pr_err("%s make overflow\n", __func__);
+    }
+/*LGE_CHANGE_E, make overflow intentionally for debbuging, 2015-01-15, kwangsik83.kim@lge.com*/
+
 	if (overflow_mask) {
 		struct msm_isp_event_data error_event;
 
@@ -1583,8 +1595,14 @@ static void msm_isp_process_overflow_irq(
 			return;
 		}
 
-		ISP_DBG("%s: Bus overflow detected: 0x%x, start recovery!\n",
-				__func__, overflow_mask);
+		pr_err("%s: Bus overflow detected: 0x%x, start recovery! irq1 : 0x%x\n",
+				__func__, overflow_mask, *irq_status1);
+
+		/*LGE_CHANGE_S, make overflow intentionally for debbuging, 2015-01-15, kwangsik83.kim@lge.com*/
+		overflow_mask = 0;
+		vfe_dev->mk_overflow = 0;
+		/*LGE_CHANGE_E, make overflow intentionally for debbuging, 2015-01-15, kwangsik83.kim@lge.com*/
+
 		atomic_set(&vfe_dev->error_info.overflow_state,
 				OVERFLOW_DETECTED);
 		/*Store current IRQ mask*/
@@ -1643,7 +1661,7 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 		read_irq_status(vfe_dev, &irq_status0, &irq_status1);
 
 	if ((irq_status0 == 0) && (irq_status1 == 0)) {
-		pr_err_ratelimited("%s:VFE%d irq_status0 & 1 are both 0\n",
+		pr_debug("%s:VFE%d irq_status0 & 1 are both 0\n",
 			__func__, vfe_dev->pdev->id);
 		return IRQ_HANDLED;
 	}

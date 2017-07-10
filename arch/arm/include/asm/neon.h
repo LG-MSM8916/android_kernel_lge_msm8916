@@ -10,7 +10,7 @@
 
 #include <asm/hwcap.h>
 
-#define cpu_has_neon()		(!!(elf_hwcap & HWCAP_NEON))
+#define cpu_has_neon()		(1)
 
 #ifdef __ARM_NEON__
 

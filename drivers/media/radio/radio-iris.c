@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#define FM_DEBUG
 
 #define DRIVER_AUTHOR "Archana Ramchandran <archanar@codeaurora.org>"
 #define DRIVER_NAME "radio-iris"
@@ -37,6 +38,13 @@
 #include <media/v4l2-ioctl.h>
 #include <media/radio-iris.h>
 #include <asm/unaligned.h>
+#ifdef CONFIG_MACH_LGE
+#include <linux/of_gpio.h>
+#endif
+
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+#include <linux/regulator/consumer.h>
+#endif
 
 static unsigned int rds_buf = 100;
 static int oda_agt;
@@ -52,11 +60,22 @@ static char formatting_dir;
 static unsigned char sig_blend = CTRL_ON;
 static DEFINE_MUTEX(iris_fm);
 
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+static struct regulator *vdd_reg = NULL;
+static int ldo_status = 0;
+#endif
+
 module_param(rds_buf, uint, 0);
 MODULE_PARM_DESC(rds_buf, "RDS buffer entries: *100*");
 
 module_param(sig_blend, byte, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(sig_blend, "signal blending switch: 0:OFF 1:ON");
+
+#ifdef CONFIG_MACH_LGE
+static unsigned char sig_gpio = 1;
+module_param(sig_gpio, byte, S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(sig_gpio, "intenna enable: 0:OFF 1:ON");
+#endif
 
 static void radio_hci_cmd_task(unsigned long arg);
 static void radio_hci_rx_task(unsigned long arg);
@@ -120,6 +139,12 @@ struct iris_device {
 	struct hci_fm_data_rd_rsp default_data;
 	struct hci_fm_spur_data spur_data;
 	unsigned char is_station_valid;
+#ifdef CONFIG_MACH_LGE
+	int fm_ldo_en;
+#endif
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+	int fm_sw;
+#endif
 	struct hci_fm_blend_table blend_tbl;
 };
 
@@ -493,6 +518,104 @@ static struct v4l2_queryctrl iris_v4l2_queryctrl[] = {
 	.default_value  =       0,
 	},
 };
+
+#ifdef CONFIG_DEBUG_FS //2013-07-08 beekay.lee@lge.com
+#include <linux/debugfs.h>
+
+/*
+    For ADB debugging
+    If you want sig_gpio = 1,       #adb shell "echo 1 > /sys/kernel/debug/radio_iris/poke"
+    If you want sig_gpio = 0,       #adb shell "echo 0 > /sys/kernel/debug/radio_iris/poke"
+*/
+
+static struct dentry *debugfs_wcd9xxx_dent;
+static struct dentry *debugfs_poke;
+
+static int codec_debug_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static int get_parameters(char *buf, long int *param1, int num_of_par)
+{
+	char *token;
+	int base, cnt = 0;
+	token = strsep(&buf, " ");
+
+	while (token != NULL) {
+		if ((strlen(token) > 2) && ((token[1] == 'x') || (token[1] == 'X')))
+			base = 16;
+		else
+			base = 10;
+
+		if (strict_strtoul(token, base, &param1[cnt]) != 0){
+			FMDERR("strict_strtoul error!!\n");
+			return -EINVAL;
+		}
+		cnt ++;
+		token = strsep(&buf, " ");
+	}
+	return 0;
+}
+
+static ssize_t codec_debug_write(struct file *filp,
+	const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	char *access_str = filp->private_data;
+	char lbuf[32];
+	int rc;
+	long int param[5] = {0,};
+
+	if (cnt > sizeof(lbuf) - 1)
+		return -EINVAL;
+
+	rc = copy_from_user(lbuf, ubuf, cnt);
+	if (rc)
+		return -EFAULT;
+
+	lbuf[cnt] = '\0';
+
+	//INFO_MSG("access_str:%s lbuf:%s cnt:%d\n", access_str, lbuf, cnt);
+
+	if (!strncmp(access_str, "poke", 6)) {
+		rc = get_parameters(lbuf, param, 3);
+		if (rc) {
+			FMDBG("error!!! get_parameters rc = %d\n", rc);
+			return rc;
+		}
+
+		switch (param[0]) {
+		case 1:
+			FMDBG("intenna flag = 1 \n");
+            sig_gpio = 1;
+
+			break;
+			
+		case 0:
+			FMDBG("intenna flag = 0\n");
+            sig_gpio = 0;
+			break;
+		default:
+			rc = -EINVAL;
+		}
+
+	}
+
+	if (rc == 0)
+		rc = cnt;
+	else
+		FMDERR("rc = %d\n", rc);
+
+	return rc;
+}
+
+static const struct file_operations codec_debug_ops = {
+	.open = codec_debug_open,
+	.write = codec_debug_write,
+};
+#endif
+
 
 static void iris_q_event(struct iris_device *radio,
 				enum iris_evt_t event)
@@ -1320,7 +1443,7 @@ static int __radio_hci_request(struct radio_hci_dev *hdev,
 
 	err = req(hdev, param);
 
-	schedule_timeout(msecs_to_jiffies(timeout));
+	schedule_timeout(timeout);
 
 	remove_wait_queue(&hdev->req_wait_q, &wait);
 
@@ -1738,90 +1861,90 @@ static int hci_cmd(unsigned int cmd, struct radio_hci_dev *hdev)
 	switch (cmd) {
 	case HCI_FM_ENABLE_RECV_CMD:
 		ret = radio_hci_request(hdev, hci_fm_enable_recv_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_DISABLE_RECV_CMD:
 		ret = radio_hci_request(hdev, hci_fm_disable_recv_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_RECV_CONF_CMD:
 		ret = radio_hci_request(hdev, hci_get_fm_recv_conf_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_STATION_PARAM_CMD:
 		ret = radio_hci_request(hdev,
 			hci_fm_get_station_param_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_SIGNAL_TH_CMD:
 		ret = radio_hci_request(hdev,
 			hci_fm_get_sig_threshold_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_PROGRAM_SERVICE_CMD:
 		ret = radio_hci_request(hdev,
 			hci_fm_get_program_service_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_RADIO_TEXT_CMD:
 		ret = radio_hci_request(hdev, hci_fm_get_radio_text_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_AF_LIST_CMD:
 		ret = radio_hci_request(hdev, hci_fm_get_af_list_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_CANCEL_SEARCH_CMD:
 		ret = radio_hci_request(hdev, hci_fm_cancel_search_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_RESET_CMD:
 		ret = radio_hci_request(hdev, hci_fm_reset_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_FEATURES_CMD:
 		ret = radio_hci_request(hdev,
 		hci_fm_get_feature_lists_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_STATION_DBG_PARAM_CMD:
 		ret = radio_hci_request(hdev,
 		hci_fm_get_station_dbg_param_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_ENABLE_TRANS_CMD:
 		ret = radio_hci_request(hdev, hci_fm_enable_trans_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_DISABLE_TRANS_CMD:
 		ret = radio_hci_request(hdev, hci_fm_disable_trans_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 
 	case HCI_FM_GET_TX_CONFIG:
 		ret = radio_hci_request(hdev, hci_get_fm_trans_conf_req, arg,
-			RADIO_HCI_TIMEOUT);
+			msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 	case HCI_FM_GET_DET_CH_TH_CMD:
 		ret = radio_hci_request(hdev, hci_fm_get_ch_det_th, arg,
-					RADIO_HCI_TIMEOUT);
+					msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 	case HCI_FM_GET_BLND_TBL_CMD:
 		ret = radio_hci_request(hdev, hci_fm_get_blend_tbl, arg,
-					RADIO_HCI_TIMEOUT);
+					msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		break;
 	default:
 		ret = -EINVAL;
@@ -1896,6 +2019,11 @@ static void hci_cc_fm_disable_rsp(struct radio_hci_dev *hdev,
 	} else if ((radio->mode == FM_TURNING_OFF) && (status != 0)) {
 		radio_hci_req_complete(hdev, status);
 	}
+	/* added by LGE, TD 137525 */
+	else if (radio->mode == FM_OFF){
+		radio_hci_req_complete(hdev, status);
+	}
+	/* added by LGE, TD 137525 */
 }
 
 static void hci_cc_conf_rsp(struct radio_hci_dev *hdev, struct sk_buff *skb)
@@ -3181,6 +3309,9 @@ static int iris_set_freq(struct iris_device *radio, unsigned int freq)
 
 	int retval;
 
+    FMDBG("freq:%d\n", freq);
+
+
 	if (unlikely(radio == NULL)) {
 		FMDERR(":radio is null");
 		return -EINVAL;
@@ -3450,6 +3581,8 @@ static int iris_vidioc_g_ctrl(struct file *file, void *priv,
 				ctrl->value = radio->fm_st_rsp.station_rsp.sinr;
 		} else
 			retval = -EINVAL;
+
+        FMDBG("sinr: %d\n", ctrl->value);
 		break;
 	case V4L2_CID_PRIVATE_INTF_HIGH_THRESHOLD:
 		retval = hci_cmd(HCI_FM_GET_DET_CH_TH_CMD, radio->fm_hdev);
@@ -3874,6 +4007,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 	__u8 intf_det_low_th, intf_det_high_th, intf_det_out;
 	unsigned int spur_freq;
 
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+	int ret;
+#endif
+
 	if (unlikely(radio == NULL)) {
 		FMDERR(":radio is null");
 		retval = -EINVAL;
@@ -3896,7 +4033,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		radio->tone_freq = ctrl->value;
 		retval = radio_hci_request(radio->fm_hdev,
 				hci_fm_tone_generator, arg,
-				RADIO_HCI_TIMEOUT);
+				msecs_to_jiffies(RADIO_HCI_TIMEOUT));
 		if (retval < 0) {
 			FMDERR("Error while setting the tone %d", retval);
 			radio->tone_freq = saved_val;
@@ -3972,6 +4109,23 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			}
 			if (radio->mode == FM_RECV_TURNING_ON) {
 				radio->mode = FM_RECV;
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+				if (radio->fm_sw > 0) {
+					if (ldo_status == 1) {
+						ret = regulator_enable(vdd_reg);
+						FMDBG("[FM_RECV_TURNING_ON] regulator enable\n");
+
+						if (ret < 0) {
+							FMDERR("[FM_RECV_TURNING_ON] regulator enable fail %d\n", ret);
+						}
+
+						mdelay(300);
+					}
+
+					gpio_direction_output(radio->fm_sw, 1);
+					FMDBG("[FM_RECV_TURNING_ON] gpio_get_value : %d\n", gpio_get_value(radio->fm_sw));
+				}
+#endif
 				iris_q_event(radio, IRIS_EVT_RADIO_READY);
 			}
 			break;
@@ -4017,6 +4171,17 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					radio->mode = FM_RECV;
 					goto END;
 				}
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+				if (radio->fm_sw > 0) {
+					gpio_direction_output(radio->fm_sw, 0);
+					FMDBG("[FM_TURNING_OFF] gpio_get_value : %d\n", gpio_get_value(radio->fm_sw));
+
+					if (ldo_status == 1) {
+						regulator_disable(vdd_reg);
+						FMDBG("[FM_TURNING_OFF] regulator disable\n");
+					}
+				}
+#endif
 				break;
 			case FM_TRANS:
 				radio->mode = FM_TURNING_OFF;
@@ -4817,6 +4982,35 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (retval < 0)
 			FMDERR("set RxRePeat count failed\n");
 		break;
+
+//LGE_UPDATE 2014-12-30 beekay.lee@lge.com For c50c vzw intenna
+#ifdef CONFIG_MACH_LGE
+	case V4L2_CID_PRIVATE_IRIS_SET_INTENNA:
+		if ( !(ctrl->value == 0 || ctrl->value == 1) ) {
+			retval = -EINVAL;
+			FMDERR("%s: value is not valid\n", __func__);
+			goto END;
+		}
+        FMDBG("intenna fm_ldo_en(%d) set to %d\n", radio->fm_ldo_en, ctrl->value);
+		if(ctrl->value == 0) {
+        	if(gpio_is_valid(radio->fm_ldo_en)){
+        		gpio_set_value(radio->fm_ldo_en, 0);
+        	} else {
+        	    FMDERR("set to 0 fail!!!\n");
+            }
+            
+        } else if(ctrl->value == 1){
+        	if(gpio_is_valid(radio->fm_ldo_en) && sig_gpio){
+        		gpio_set_value(radio->fm_ldo_en, 1);
+            } else {
+                FMDERR("set to 1 fail!!!\n");
+            }
+        } 
+
+        break;
+#endif
+
+
 	case V4L2_CID_PRIVATE_IRIS_GET_SPUR_TBL:
 		spur_freq = ctrl->value;
 		retval = radio_hci_request(radio->fm_hdev,
@@ -4991,6 +5185,11 @@ static int iris_vidioc_g_tuner(struct file *file, void *priv,
 		tuner->signal = radio->fm_st_rsp.station_rsp.rssi;
 		tuner->audmode = radio->fm_st_rsp.station_rsp.stereo_prg;
 		tuner->afc = 0;
+
+#ifdef CONFIG_MACH_LGE
+            FMDBG("rssi:%d\n", tuner->signal);
+#endif
+        
 	} else if (radio->mode == FM_TRANS) {
 		retval = hci_cmd(HCI_FM_GET_TX_CONFIG, radio->fm_hdev);
 		if (retval < 0) {
@@ -5134,10 +5333,16 @@ static int iris_fops_release(struct file *file)
 		radio->mode = FM_OFF;
 		retval = hci_cmd(HCI_FM_DISABLE_RECV_CMD,
 						radio->fm_hdev);
+		/* wait for disable cmd resp from controller */
+		if(retval == -EINTR)		//added by LGE, TD 137525
+			msleep(50);
 	} else if (radio->mode == FM_TRANS) {
 		radio->mode = FM_OFF;
 		retval = hci_cmd(HCI_FM_DISABLE_TRANS_CMD,
 					radio->fm_hdev);
+		/* wait for disable cmd resp from controller */
+		if(retval == -EINTR)		//added by LGE, TD 137525
+			msleep(50);
 	} else if (radio->mode == FM_CALIB) {
 		radio->mode = FM_OFF;
 		return retval;
@@ -5150,6 +5355,8 @@ END:
 
 	return retval;
 }
+
+
 
 static int iris_vidioc_dqbuf(struct file *file, void *priv,
 				struct v4l2_buffer *buffer)
@@ -5253,7 +5460,11 @@ static int initialise_recv(struct iris_device *radio)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_LGE_FMRADIO_SOFT_MUTE_OFF
+	radio->mute_mode.soft_mute = CTRL_OFF;
+#else
 	radio->mute_mode.soft_mute = CTRL_ON;
+#endif
 	retval = hci_set_fm_mute_mode(&radio->mute_mode,
 					radio->fm_hdev);
 
@@ -5366,6 +5577,36 @@ static struct video_device *video_get_dev(void)
 	return priv_videodev;
 }
 
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+static int ant_switch_voltage_parse_dts(struct device *dev)
+{
+	int rc;
+	int err;
+
+	FMDBG("enter\n");
+
+	vdd_reg = regulator_get(dev, "xm,vdd_fm_sw");
+	if (IS_ERR(vdd_reg)) {
+		err = PTR_ERR(vdd_reg);
+		return err;
+	}
+
+	if (regulator_count_voltages(vdd_reg) > 0) {
+		rc = regulator_set_voltage(vdd_reg, 2500000, 3000000);
+
+		if (rc != 0) {
+			FMDERR("regulator_set_voltage failed : %d\n", rc);
+			return rc;
+		}
+	}
+
+	ldo_status = 1;
+	FMDBG("regulator voltage check end\n");
+
+	return 1;
+}
+#endif
+
 static int __init iris_probe(struct platform_device *pdev)
 {
 	struct iris_device *radio;
@@ -5397,6 +5638,31 @@ static int __init iris_probe(struct platform_device *pdev)
 	memcpy(radio->videodev, &iris_viddev_template,
 	  sizeof(iris_viddev_template));
 
+#ifdef CONFIG_MACH_LGE
+	radio->fm_ldo_en = -1;
+	radio->fm_ldo_en = of_get_named_gpio(pdev->dev.of_node, "qcom,fm-ldo-en-gpio", 0);
+	if(radio->fm_ldo_en > 0 ){
+		retval = gpio_request(radio->fm_ldo_en, "fm_ldo_en");
+		gpio_direction_output(radio->fm_ldo_en, 0);
+		FMDBG("intenna: fm_ldo_en: %d, ret: %d\n", radio->fm_ldo_en, retval);
+	}
+#endif
+
+#ifdef CONFIG_LGE_ANT_SWITCH_FMRADIO_TDMB
+	if (ant_switch_voltage_parse_dts(radio->dev) == 1)
+		FMDBG("LDO use\n");
+	else
+		FMDBG("LDO not use\n");
+
+
+	radio->fm_sw = -1;
+	radio->fm_sw = of_get_named_gpio(pdev->dev.of_node, "qcom,fm-sw-gpio", 0);
+	if(radio->fm_sw > 0 ){
+		retval = gpio_request(radio->fm_sw, "fm_sw");
+		gpio_direction_output(radio->fm_sw, 0);
+		FMDBG("radio antenna enable gpio : %d, ret: %d\n", radio->fm_sw, retval);
+	}
+#endif
 	for (i = 0; i < IRIS_BUF_MAX; i++) {
 		int kfifo_alloc_rc = 0;
 		spin_lock_init(&radio->buf_lock[i]);
@@ -5457,6 +5723,12 @@ static int __init iris_probe(struct platform_device *pdev)
 			kfree(radio);
 		}
 	}
+#ifdef CONFIG_DEBUG_FS
+	debugfs_wcd9xxx_dent = debugfs_create_dir("radio_iris", 0);
+	if (!IS_ERR(debugfs_wcd9xxx_dent)) {
+		debugfs_poke = debugfs_create_file("poke", S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent, (void *) "poke", &codec_debug_ops);
+	}
+#endif    
 	return 0;
 }
 
@@ -5478,6 +5750,12 @@ static int iris_remove(struct platform_device *pdev)
 	kfree(radio);
 
 	platform_set_drvdata(pdev, NULL);
+
+#ifdef CONFIG_DEBUG_FS
+        debugfs_remove(debugfs_poke);
+        debugfs_remove(debugfs_wcd9xxx_dent);
+#endif
+
 
 	return 0;
 }

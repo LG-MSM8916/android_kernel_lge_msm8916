@@ -44,6 +44,9 @@ struct mdss_hw mdss_dsi1_hw = {
 	.irq_handler = mdss_dsi_isr,
 };
 
+#if defined(CONFIG_JDI_INCELL_VIDEO_HD_PANEL) && defined(CONFIG_LGD_INCELL_DB7400_VIDEO_HD_DUAL_PANEL)
+extern int lge_dual_panel;
+#endif
 
 #define DSI_EVENT_Q_MAX	4
 
@@ -107,7 +110,6 @@ void mdss_dsi_ctrl_init(struct device *ctrl_dev,
 	mutex_init(&ctrl->mutex);
 	mutex_init(&ctrl->cmd_mutex);
 	mutex_init(&ctrl->clk_lane_mutex);
-	mutex_init(&ctrl->cmdlist_mutex);
 	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->tx_buf, SZ_4K);
 	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->rx_buf, SZ_4K);
 	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->status_buf, SZ_4K);
@@ -307,6 +309,14 @@ void mdss_dsi_host_init(struct mdss_panel_data *pdata)
 		data |= ((pinfo->traffic_mode & 0x03) << 8);
 		data |= ((pinfo->dst_format & 0x03) << 4); /* 2 bits */
 		data |= (pinfo->vc & 0x03);
+#if defined(CONFIG_LGD_INCELL_VIDEO_WVGA_PT_PANEL) || defined(CONFIG_LGD_INCELL_VIDEO_FWVGA_PT_PANEL)
+		data |= BIT(31);
+#elif defined(CONFIG_LGE_DISPLAY_CODE_REFACTORING) || defined(CONFIG_LGD_INCELL_PHASE3_VIDEO_HD_PT_PANEL)
+		data |= BIT(31);
+#elif defined(CONFIG_JDI_INCELL_VIDEO_HD_PANEL) && defined(CONFIG_LGD_INCELL_DB7400_VIDEO_HD_DUAL_PANEL)
+	if (lge_dual_panel == SECONDARY_MODULE)
+		data |= BIT(31);
+#endif
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0010, data);
 
 		data = 0;
@@ -358,6 +368,18 @@ void mdss_dsi_host_init(struct mdss_panel_data *pdata)
 	if (pinfo->data_lane0)
 		dsi_ctrl |= BIT(4);
 
+#if defined(CONFIG_LGD_INCELL_VIDEO_WVGA_PT_PANEL) || defined(CONFIG_LGD_INCELL_VIDEO_FWVGA_PT_PANEL)
+	MIPI_OUTP(ctrl_pdata->ctrl_base + 0xBC, 0xFFFFF);
+	MIPI_OUTP(ctrl_pdata->ctrl_base + 0xC0, 0x111);
+#elif defined(CONFIG_LGE_DISPLAY_CODE_REFACTORING) || defined(CONFIG_LGD_INCELL_PHASE3_VIDEO_HD_PT_PANEL) || defined (CONFIG_LGD_DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_M2DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL)
+	MIPI_OUTP(ctrl_pdata->ctrl_base + 0xBC, 0xFFFFF);
+	MIPI_OUTP(ctrl_pdata->ctrl_base + 0xC0, 0x111);
+#elif defined(CONFIG_JDI_INCELL_VIDEO_HD_PANEL) && defined(CONFIG_LGD_INCELL_DB7400_VIDEO_HD_DUAL_PANEL)
+	if (lge_dual_panel == SECONDARY_MODULE) {
+		MIPI_OUTP(ctrl_pdata->ctrl_base + 0xBC, 0xFFFFF);
+		MIPI_OUTP(ctrl_pdata->ctrl_base + 0xC0, 0x111);
+	}
+#endif
 
 	data = 0;
 	if (pinfo->te_sel)
@@ -757,9 +779,9 @@ static void mdss_dsi_ctl_phy_reset(struct mdss_dsi_ctrl_pdata *ctrl, u32 event)
 
 		data0 = MIPI_INP(ctrl->ctrl_base + 0x0004);
 		/* Disable DSI video mode */
-		MIPI_OUTP(ctrl->ctrl_base + 0x004, 0x1f5);
+		MIPI_OUTP(ctrl->ctrl_base + 0x004, data0 & ~(0x2));
 		/* Disable DSI controller */
-		MIPI_OUTP(ctrl->ctrl_base + 0x004, 0x1f4);
+		MIPI_OUTP(ctrl->ctrl_base + 0x004, data0 & ~(0x3));
 		/* "Force On" all dynamic clocks */
 		MIPI_OUTP(ctrl->ctrl_base + 0x11c, 0x100a00);
 
@@ -772,7 +794,7 @@ static void mdss_dsi_ctl_phy_reset(struct mdss_dsi_ctrl_pdata *ctrl, u32 event)
 		/* Remove "Force On" all dynamic clocks */
 		MIPI_OUTP(ctrl->ctrl_base + 0x11c, 0x00);
 		/* Enable DSI controller */
-		MIPI_OUTP(ctrl->ctrl_base + 0x004, 0x1f5);
+		MIPI_OUTP(ctrl->ctrl_base + 0x004, data0 & ~(0x2));
 
 		/*
 		 * Toggle Clk lane Force TX stop so that
@@ -803,7 +825,7 @@ static void mdss_dsi_ctl_phy_reset(struct mdss_dsi_ctrl_pdata *ctrl, u32 event)
 		MIPI_OUTP(ctrl->ctrl_base + 0x0ac, ln_ctrl0 & ~mask);
 
 		/* Enable Video mode for DSI controller */
-		MIPI_OUTP(ctrl->ctrl_base + 0x004, 0x1f7);
+		MIPI_OUTP(ctrl->ctrl_base + 0x004, data0);
 		/* Enable PHY contention detection and receiver */
 		MIPI_OUTP((ctrl->phy_io.base) + 0x0188, 0x6);
 		/*
@@ -1032,7 +1054,7 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
 	u32 ystride, bpp, dst_bpp;
 	u32 stream_ctrl, stream_total;
 	u32 dummy_xres = 0, dummy_yres = 0;
-	u32 hsync_period, vsync_period, reg = 0;
+	u32 hsync_period, vsync_period;
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
@@ -1106,13 +1128,6 @@ static void mdss_dsi_mode_setup(struct mdss_panel_data *pdata)
 			stream_total = height << 16 | width;
 		}
 
-		/* Enable frame transfer in burst mode */
-		if (ctrl_pdata->hw_rev >= MDSS_DSI_HW_REV_103) {
-			reg = MIPI_INP(ctrl_pdata->ctrl_base + 0x1b8);
-			reg = reg | BIT(16);
-			MIPI_OUTP((ctrl_pdata->ctrl_base + 0x1b8), reg);
-			ctrl_pdata->burst_mode_enabled = 1;
-		}
 		/* DSI_COMMAND_MODE_MDP_STREAM_CTRL */
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x60, stream_ctrl);
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x58, stream_ctrl);
@@ -2028,43 +2043,31 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	struct mdss_rect *roi = NULL;
 	int ret = -EINVAL;
 	int rc = 0;
-	bool cmd_mutex_acquired = false;
 
 	if (mdss_get_sd_client_cnt())
 		return -EPERM;
 
 	if (from_mdp) {	/* from mdp kickoff */
-		if (!ctrl->burst_mode_enabled) {
-			mutex_lock(&ctrl->cmd_mutex);
-			cmd_mutex_acquired = true;
-		}
+		mutex_lock(&ctrl->cmd_mutex);
 		pinfo = &ctrl->panel_data.panel_info;
 		if (pinfo->partial_update_enabled)
 			roi = &pinfo->roi;
 	}
 
 	req = mdss_dsi_cmdlist_get(ctrl);
-	if (req && from_mdp && ctrl->burst_mode_enabled) {
-		mutex_lock(&ctrl->cmd_mutex);
-		cmd_mutex_acquired = true;
-	}
 
 	MDSS_XLOG(ctrl->ndx, from_mdp, ctrl->mdp_busy, current->pid,
 							XLOG_FUNC_ENTRY);
 
 	if (req == NULL)
 		goto need_lock;
-	if (!ctrl->burst_mode_enabled || from_mdp) {
-		/* make sure dsi_cmd_mdp is idle when
-		 * burst mode is not enabled
-		*/
-		rc = mdss_dsi_cmd_mdp_busy(ctrl);
-		if (rc) {
-			pr_err("%s: mdp busy timeout\n", __func__);
-			if (from_mdp)
-				mutex_unlock(&ctrl->cmd_mutex);
-			return rc;
-		}
+	/* make sure dsi_cmd_mdp is idle */
+	rc = mdss_dsi_cmd_mdp_busy(ctrl);
+	if (rc) {
+		pr_err("%s: mdp busy timeout\n", __func__);
+		if (from_mdp)
+			mutex_unlock(&ctrl->cmd_mutex);
+		return rc;
 	}
 
 	pr_debug("%s: ctrl=%d from_mdp=%d pid=%d\n", __func__,
@@ -2150,8 +2153,8 @@ need_lock:
 		 */
 		if (!roi || (roi->w != 0 || roi->h != 0))
 			mdss_dsi_cmd_mdp_start(ctrl);
-		if (cmd_mutex_acquired)
-			mutex_unlock(&ctrl->cmd_mutex);
+
+		mutex_unlock(&ctrl->cmd_mutex);
 	} else {	/* from dcs send */
 		if (ctrl->cmd_clk_ln_recovery_en &&
 				ctrl->panel_mode == DSI_CMD_MODE &&
@@ -2192,6 +2195,8 @@ static int dsi_event_thread(void *data)
 	u32 todo = 0, ln_status, force_clk_ln_hs;
 	u32 arg;
 	int ret;
+#define DLNx_ENABLED_MASK 0x00F0
+#define DLNx_ENABLED_MASK_SHIFT 0x4
 
 	param.sched_priority = 16;
 	ret = sched_setscheduler_nocheck(current, SCHED_FIFO, &param);

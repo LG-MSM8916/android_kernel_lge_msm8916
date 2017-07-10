@@ -22,7 +22,6 @@
 #include <linux/module.h>
 #include <linux/workqueue.h>
 #include <linux/sched.h>
-#include <linux/input.h>
 #include <sound/core.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
@@ -43,13 +42,6 @@
 #define BTSCO_RATE_16KHZ 16000
 #define MAX_SND_CARDS 2
 
-#define SAMPLING_RATE_8KHZ      8000
-#define SAMPLING_RATE_16KHZ     16000
-#define SAMPLING_RATE_32KHZ     32000
-#define SAMPLING_RATE_48KHZ     48000
-#define SAMPLING_RATE_96KHZ     96000
-#define SAMPLING_RATE_192KHZ    192000
-
 #define PRI_MI2S_ID	(1 << 0)
 #define SEC_MI2S_ID	(1 << 1)
 #define TER_MI2S_ID	(1 << 2)
@@ -64,6 +56,9 @@
 
 #define WCD_MBHC_DEF_RLOADS 5
 
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+int ext_spk_boost_gpio = -1;
+#endif
 #define LPASS_CSR_GP_LPAIF_PRI_PCM_PRI_MODE_MUXSEL 0x07702008
 
 #define MAX_AUX_CODECS	2
@@ -78,7 +73,6 @@ static int msm_btsco_ch = 1;
 
 static int msm_mi2s_tx_ch = 2;
 static int msm_pri_mi2s_rx_ch = 2;
-static int pri_rx_sample_rate = SAMPLING_RATE_48KHZ;
 
 static int msm_proxy_rx_ch = 2;
 static int msm8909_auxpcm_rate = 8000;
@@ -92,29 +86,18 @@ static int msm8x16_enable_extcodec_ext_clk(struct snd_soc_codec *codec,
 					int enable,	bool dapm);
 
 static int conf_int_codec_mux(struct msm8916_asoc_mach_data *pdata);
-
+#ifdef CONFIG_MACH_LGE
+static int external_micbias2_pullup = 0;
+#endif
 static void *def_tasha_mbhc_cal(void);
-/*
- * Android L spec
- * Need to report LINEIN
- * if R/L channel impedance is larger than 5K ohm
- */
+
 static struct wcd_mbhc_config mbhc_cfg = {
 	.read_fw_bin = false,
 	.calibration = NULL,
-	.detect_extn_cable = true,
+	.detect_extn_cable = false,		// LGE Change
 	.mono_stero_detection = false,
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = false,
-	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOICECOMMAND,
-	.key_code[2] = KEY_VOLUMEUP,
-	.key_code[3] = KEY_VOLUMEDOWN,
-	.key_code[4] = 0,
-	.key_code[5] = 0,
-	.key_code[6] = 0,
-	.key_code[7] = 0,
-	.linein_th = 5000,
 };
 
 static struct wcd_mbhc_config wcd_mbhc_cfg = {
@@ -277,7 +260,6 @@ static struct cdc_pdm_pinctrl_info pinctrl_info;
 struct ext_cdc_tlmm_pinctrl_info ext_cdc_pinctrl_info;
 
 static int mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
-static int bits_per_sample = 16;
 
 struct msm8909_auxcodec_prefix_map {
 	char codec_name[50];
@@ -379,9 +361,6 @@ static const struct snd_soc_dapm_widget msm8x16_dapm_widgets[] = {
 static char const *rx_bit_format_text[] = {"S16_LE", "S24_LE"};
 static const char *const mi2s_tx_ch_text[] = {"One", "Two", "Three", "Four"};
 static const char *const loopback_mclk_text[] = {"DISABLE", "ENABLE"};
-static char const *pri_rx_sample_rate_text[] = {"KHZ_48", "KHZ_96",
-					"KHZ_192", "KHZ_8",
-					"KHZ_16", "KHZ_32"};
 
 static int msm_auxpcm_be_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					struct snd_pcm_hw_params *params)
@@ -434,9 +413,9 @@ static int msm_pri_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	struct snd_interval *channels = hw_param_interval(params,
 					SNDRV_PCM_HW_PARAM_CHANNELS);
 
-	pr_debug("%s: Number of channels = %d Sample rate = %d \n", __func__,
-			msm_pri_mi2s_rx_ch, pri_rx_sample_rate);
-	rate->min = rate->max =  pri_rx_sample_rate;
+	pr_debug("%s: Number of channels = %d\n", __func__,
+			msm_pri_mi2s_rx_ch);
+	rate->min = rate->max = 48000;
 	channels->min = channels->max = msm_pri_mi2s_rx_ch;
 
 	return 0;
@@ -486,12 +465,10 @@ static int mi2s_rx_bit_format_put(struct snd_kcontrol *kcontrol,
 	switch (ucontrol->value.integer.value[0]) {
 	case 1:
 		mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S24_LE;
-		bits_per_sample = 32;
 		break;
 	case 0:
 	default:
 		mi2s_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
-		bits_per_sample = 16;
 		break;
 	}
 	return 0;
@@ -669,68 +646,6 @@ static int msm_pri_mi2s_rx_ch_put(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
-static int pri_rx_sample_rate_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	int sample_rate_val = 0;
-
-	switch (pri_rx_sample_rate) {
-	case SAMPLING_RATE_32KHZ:
-		sample_rate_val = 5;
-		break;
-	case SAMPLING_RATE_16KHZ:
-		sample_rate_val = 4;
-		break;
-	case SAMPLING_RATE_8KHZ:
-		sample_rate_val = 3;
-		break;
-	case SAMPLING_RATE_192KHZ:
-		sample_rate_val = 2;
-		break;
-	case SAMPLING_RATE_96KHZ:
-		sample_rate_val = 1;
-		break;
-	case SAMPLING_RATE_48KHZ:
-	default:
-		sample_rate_val = 0;
-		break;
-	}
-
-	ucontrol->value.integer.value[0] = sample_rate_val;
-	pr_debug("%s: sample_rate_val = %d\n", __func__,
-		 sample_rate_val);
-
-	return 0;
-}
-
-static int pri_rx_sample_rate_put(struct snd_kcontrol *kcontrol,
-				    struct snd_ctl_elem_value *ucontrol)
-{
-	switch (ucontrol->value.integer.value[0]) {
-	case 5:
-		pri_rx_sample_rate = SAMPLING_RATE_32KHZ;
-		break;
-	case 4:
-		pri_rx_sample_rate = SAMPLING_RATE_16KHZ;
-		break;
-	case 3:
-		pri_rx_sample_rate = SAMPLING_RATE_8KHZ;
-		break;
-	case 2:
-		pri_rx_sample_rate = SAMPLING_RATE_192KHZ;
-		break;
-	case 1:
-		pri_rx_sample_rate = SAMPLING_RATE_96KHZ;
-		break;
-	case 0:
-	default:
-		pri_rx_sample_rate = SAMPLING_RATE_48KHZ;
-	}
-	pr_debug("%s: pri_rx_sample_rate = %d\n", __func__,
-		 pri_rx_sample_rate);
-	return 0;
-}
-
 static int msm_mi2s_tx_ch_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -885,16 +800,15 @@ static int ext_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable,
 
 	if (enable) {
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			u32 clk_val = pri_rx_sample_rate * bits_per_sample * 2;
-			mi2s_rx_clk.clk_val1 = clk_val;
+			mi2s_rx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
 			ret = afe_set_lpass_clock(
-					port_id,
-					&mi2s_rx_clk);
+				port_id,
+				&mi2s_rx_clk);
 		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			mi2s_tx_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
 			ret = afe_set_lpass_clock(
-					port_id,
-					&mi2s_tx_clk);
+				port_id,
+				&mi2s_tx_clk);
 		} else
 			pr_err("%s:Not valid substream.\n", __func__);
 
@@ -1020,7 +934,20 @@ static int msm_btsco_rate_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	pr_debug("%s: msm_btsco_rate  = %d", __func__, msm_btsco_rate);
+#ifdef CONFIG_MACH_LGE
+    switch (msm_btsco_rate) {
+    case BTSCO_RATE_16KHZ:
+        ucontrol->value.integer.value[0] = 1;
+        break;
+
+    case BTSCO_RATE_8KHZ:
+    default:
+        ucontrol->value.integer.value[0] = 0;
+        break;
+    }
+#else
 	ucontrol->value.integer.value[0] = msm_btsco_rate;
+#endif
 	return 0;
 }
 
@@ -1047,7 +974,6 @@ static const struct soc_enum msm_snd_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, rx_bit_format_text),
 	SOC_ENUM_SINGLE_EXT(4, mi2s_tx_ch_text),
 	SOC_ENUM_SINGLE_EXT(2, loopback_mclk_text),
-	SOC_ENUM_SINGLE_EXT(6, pri_rx_sample_rate_text),
 };
 
 static const char *const btsco_rate_text[] = {"BTSCO_RATE_8KHZ",
@@ -1067,8 +993,7 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			loopback_mclk_get, loopback_mclk_put),
 	SOC_ENUM_EXT("Internal BTSCO SampleRate", msm_btsco_enum[0],
 		     msm_btsco_rate_get, msm_btsco_rate_put),
-	SOC_ENUM_EXT("RX SampleRate", msm_snd_enum[3],
-			pri_rx_sample_rate_get, pri_rx_sample_rate_put),
+
 };
 
 static int msm8x16_mclk_event(struct snd_soc_dapm_widget *w,
@@ -1375,7 +1300,7 @@ static int msm_quat_mi2s_snd_startup(struct snd_pcm_substream *substream)
 			goto err1;
 		}
 	} else {
-		pr_debug("%s: External codec \n", __func__);
+		pr_debug("%s: External codec type\n", __func__);
 		vaddr = pdata->vaddr_gpio_mux_spkr_ctl;
 		val = ioread32(vaddr);
 		val = val | 0x00000002; /* modify fileds for external codec */
@@ -1598,7 +1523,7 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 	}
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8x16_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
+	S(v_hs_max, 1700);
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm8x16_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -1621,6 +1546,34 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 	 * 210-290 == Button 2
 	 * 360-680 == Button 3
 	 */
+#ifdef CONFIG_MACH_LGE
+if(external_micbias2_pullup){
+	btn_low[0] = 180;   /* Hook-Key */
+	btn_high[0] = 180;
+	btn_low[1] = 276;   /* Volume Assist */
+	btn_high[1] = 276;
+	btn_low[2] = 384;   /* Volume Up */
+	btn_high[2] = 384;
+	btn_low[3] = 696;   /* Volume Down */
+	btn_high[3] = 696;
+	btn_low[4] = 700;
+	btn_high[4] = 700;
+	pr_info("[LGE MBHC] Temp cal2(2.2k). is applied.\n");
+}
+else{
+	btn_low[0] = 84;    /* Hook-Key */
+	btn_high[0] = 84;
+	btn_low[1] = 134;   /* Volume Assist */
+	btn_high[1] = 134;
+	btn_low[2] = 200;   /* Volume Up */
+	btn_high[2] = 200;
+	btn_low[3] = 400;   /* Volume Down */
+	btn_high[3] = 400;
+	btn_low[4] = 401;
+	btn_high[4] = 401;
+	pr_info("[LGE MBHC] Temp cal1. is applied.\n");
+}
+#else	/* Qualcomm Default Values */
 	btn_low[0] = 75;
 	btn_high[0] = 75;
 	btn_low[1] = 150;
@@ -1631,6 +1584,7 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 	btn_high[3] = 450;
 	btn_low[4] = 500;
 	btn_high[4] = 500;
+#endif
 
 	return msm8x16_wcd_cal;
 }
@@ -1775,20 +1729,6 @@ static struct snd_soc_dai_link msm8x16_9326_dai[] = {
 		.ops = &msm8x16_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
-	{ /* FrontEnd DAI Link, CPE Service */
-		.name = "CPE Listen service",
-		.stream_name = "CPE Listen Audio Service",
-		.cpu_dai_name = "msm-dai-q6-mi2s.3",
-		.platform_name = "msm-cpe-lsm",
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-			SND_SOC_DPCM_TRIGGER_POST},
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-		.codec_dai_name = "tasha_mad1",
-		.codec_name = "tasha_codec",
-		.ops = &msm8x16_quat_mi2s_be_ops,
-	},
 };
 
 static struct snd_soc_aux_dev msm8909_aux_dev[] = {
@@ -1885,18 +1825,7 @@ static struct snd_soc_dai_link msm8x16_wcd_dai[] = {
 		.ops = &msm8x16_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
-	{
-		.name = LPASS_BE_INT_BT_A2DP_RX,
-		.stream_name = "Internal BT-A2DP Playback",
-		.cpu_dai_name = "msm-dai-q6-dev.12290",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-		.no_pcm = 1,
-		.be_id = MSM_BACKEND_DAI_INT_BT_A2DP_RX,
-		.be_hw_params_fixup = msm_bta2dp_be_hw_params_fixup,
-		.ignore_suspend = 1,
-	},
+	/* Backend I2S DAI Links */
 };
 
 /* Digital audio interface glue - connects codec <---> CPU */
@@ -2358,6 +2287,19 @@ static struct snd_soc_dai_link msm8x16_dai[] = {
 		.be_hw_params_fixup = msm_btsco_be_hw_params_fixup,
 		.ignore_suspend = 1,
 	},
+	{
+		.name = LPASS_BE_INT_BT_A2DP_RX,
+		.stream_name = "Internal BT-A2DP Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.12290",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_INT_BT_A2DP_RX,
+		.be_hw_params_fixup = msm_bta2dp_be_hw_params_fixup,
+		.ignore_suspend = 1,
+	},
+
 	{
 		.name = LPASS_BE_INT_FM_RX,
 		.stream_name = "Internal FM Playback",
@@ -2979,6 +2921,11 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 		goto err;
 	}
 
+#ifdef CONFIG_MACH_LGE
+	ret = of_property_read_u32(pdev->dev.of_node, "lg,external-micbias2_pullup", &external_micbias2_pullup);
+	dev_err(&pdev->dev, "%s: external-micbias2_pullup = %d in dt node\n", __func__, external_micbias2_pullup);
+#endif
+
 	ret = of_property_read_u32(pdev->dev.of_node, mclk, &id);
 	if (ret) {
 		dev_err(&pdev->dev,
@@ -3139,6 +3086,26 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 			ret);
 		goto err;
 	}
+
+#ifdef CONFIG_SND_SOC_TPS61256A_BOOST
+	ext_spk_boost_gpio = of_get_named_gpio(pdev->dev.of_node,
+				"qcom,msm-spk-boost-gpios", 0);
+	if (ext_spk_boost_gpio < 0) {
+		dev_err(card->dev, "Looking up %s property in node %s failed %d\n",
+			"qcom,msm-spk-boost-gpios\n",
+			pdev->dev.of_node->full_name, ext_spk_boost_gpio);
+	} else {
+		ret = gpio_request(ext_spk_boost_gpio, "SPK_5V_EXT_BOOSTER");
+		if (ret) {
+			/* GPIO to enable EXT VDD exists, but failed request */
+			dev_err(card->dev,
+					"%s: Failed to request spk external booster gpio %d\n",
+					__func__, ext_spk_boost_gpio);
+			goto err;
+		}
+	}
+#endif
+
 	return 0;
 err:
 	if (pdata->vaddr_gpio_mux_spkr_ctl)

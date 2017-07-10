@@ -108,6 +108,21 @@ enum mdp_mmap_type {
 	MDP_FB_MMAP_PHYSICAL_ALLOC,
 };
 
+/* enum bklt_type - Lists blu type
+ *
+ * @CTRL_BACKLIGHT : Main BLU, in this mode this means PMIC
+ * @CTRL_BACKLIGHT_EX : Extended BLU, in this mode this means LM3697
+ *
+ * It is possible to change with MODEL dep.
+ */
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+enum bklt_type {
+	// BL_PWM, BL_WLED, BL_DCS_CMD, UNKNOWN_CTRL
+	CTRL_BACKLIGHT_EX,
+	CTRL_BACKLIGHT,
+};
+#endif
+
 struct disp_info_type_suspend {
 	int op_enable;
 	int panel_power_state;
@@ -246,6 +261,15 @@ struct msm_fb_data_type {
 	u32 unset_bl_level;
 	u32 bl_updated;
 	u32 bl_level_old;
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+	u32 calib_mode_bl;
+	int ctrl_bklt;
+
+	u32 bl_level_ex;
+	u32 unset_bl_level_ex;
+	u32 bl_updated_ex;	// need to check
+	u32 bl_level_scaled_ex;
+#endif
 	struct mutex bl_lock;
 
 	struct platform_device *pdev;
@@ -292,6 +316,11 @@ struct msm_fb_data_type {
 
 	int fb_mmap_type;
 	struct led_trigger *boot_notification_led;
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+	int aod;
+	int ignore_aod;
+	int fakeu3;
+#endif
 };
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
@@ -359,6 +388,10 @@ static inline bool mdss_fb_is_hdmi_primary(struct msm_fb_data_type *mfd)
 int mdss_fb_get_phys_info(dma_addr_t *start, unsigned long *len, int fb_num);
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl);
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd);
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+void mdss_fb_set_backlight_ex(struct msm_fb_data_type *mfd, u32 bkl_lvl);
+void mdss_fb_update_backlight_ex(struct msm_fb_data_type *mfd);
+#endif
 int mdss_fb_wait_for_fence(struct msm_sync_pt_data *sync_pt_data);
 void mdss_fb_signal_timeline(struct msm_sync_pt_data *sync_pt_data);
 struct sync_fence *mdss_fb_sync_get_fence(struct sw_sync_timeline *timeline,
@@ -370,4 +403,12 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		     unsigned long arg);
 int mdss_fb_compat_ioctl(struct fb_info *info, unsigned int cmd,
 			 unsigned long arg);
+#if defined (CONFIG_LGE_LCD_ESD)
+enum {
+	ESDRC_OK = 0,
+	ESDRC_LCD_OFF,
+	ESDRC_UNBLANK_TIMEOUT,
+};
+int lge_mdss_report_panel_dead(void);
+#endif
 #endif /* MDSS_FB_H */
