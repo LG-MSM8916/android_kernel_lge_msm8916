@@ -562,7 +562,7 @@ void msm_pcm_routing_reg_psthr_stream(int fedai_id, int dspst_id,
 
 int msm_pcm_routing_reg_phy_compr_stream(int fe_id, bool perf_mode,
 					  int dspst_id, int stream_type,
-					  uint32_t compr_passthr_mode)
+					  uint32_t passthr_mode)
 {
 	int i, j, session_type, path_type, port_type, topology, num_copps = 0;
 	struct route_payload payload;
@@ -571,7 +571,7 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, bool perf_mode,
 
 	pr_debug("%s:fe_id[%d] perf_mode[%d] id[%d] stream_type[%d] passt[%d]",
 		 __func__, fe_id, perf_mode, dspst_id,
-		 stream_type, compr_passthr_mode);
+		 stream_type, passthr_mode);
 
 	if (fe_id > MSM_FRONTEND_DAI_MM_MAX_ID) {
 		/* bad ID assigned in machine driver */
@@ -581,7 +581,7 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, bool perf_mode,
 
 	if (stream_type == SNDRV_PCM_STREAM_PLAYBACK) {
 		session_type = SESSION_TYPE_RX;
-		if (compr_passthr_mode != LEGACY_PCM)
+		if (passthr_mode != LEGACY_PCM)
 			path_type = ADM_PATH_COMPRESSED_RX;
 		else
 			path_type = ADM_PATH_PLAYBACK;
@@ -603,7 +603,7 @@ int msm_pcm_routing_reg_phy_compr_stream(int fe_id, bool perf_mode,
 	msm_qti_pp_send_eq_values(fe_id);
 	for (i = 0; i < MSM_BACKEND_DAI_MAX; i++) {
 		if (test_bit(fe_id, &msm_bedais[i].fe_sessions))
-			msm_bedais[i].compr_passthr_mode = compr_passthr_mode;
+			msm_bedais[i].passthr_mode = passthr_mode;
 
 		if (!is_be_dai_extproc(i) &&
 			(afe_get_port_type(msm_bedais[i].port_id) ==
@@ -718,7 +718,7 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 		   (test_bit(fedai_id, &msm_bedais[i].fe_sessions))) {
 			int app_type, app_type_idx, copp_idx, acdb_dev_id;
 			channels = msm_bedais[i].channel;
-			msm_bedais[i].compr_passthr_mode =
+			msm_bedais[i].passthr_mode =
 				LEGACY_PCM;
 			if (msm_bedais[i].format == SNDRV_PCM_FORMAT_S16_LE)
 				bits_per_sample = 16;
@@ -772,7 +772,7 @@ int msm_pcm_routing_reg_phy_stream(int fedai_id, int perf_mode,
 				}
 			}
 			if ((perf_mode == LEGACY_PCM_MODE) &&
-				(msm_bedais[i].compr_passthr_mode ==
+				(msm_bedais[i].passthr_mode ==
 				LEGACY_PCM))
 				msm_pcm_routing_cfg_pp(msm_bedais[i].port_id,
 						       copp_idx, topology,
@@ -865,7 +865,7 @@ void msm_pcm_routing_dereg_phy_stream(int fedai_id, int stream_type)
 			if ((DOLBY_ADM_COPP_TOPOLOGY_ID == topology ||
 				DS2_ADM_COPP_TOPOLOGY_ID == topology) &&
 			    (fdai->perf_mode == LEGACY_PCM_MODE) &&
-			    (msm_bedais[i].compr_passthr_mode ==
+			    (msm_bedais[i].passthr_mode ==
 					LEGACY_PCM))
 				msm_pcm_routing_deinit_pp(msm_bedais[i].port_id,
 							  topology);
@@ -912,7 +912,7 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 	if (afe_get_port_type(msm_bedais[reg].port_id) ==
 		MSM_AFE_PORT_TYPE_RX) {
 		session_type = SESSION_TYPE_RX;
-		if (msm_bedais[reg].compr_passthr_mode != LEGACY_PCM)
+		if (msm_bedais[reg].passthr_mode != LEGACY_PCM)
 			path_type = ADM_PATH_COMPRESSED_RX;
 		else
 			path_type = ADM_PATH_PLAYBACK;
@@ -992,7 +992,7 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 						     path_type,
 						     fdai->perf_mode);
 			if ((fdai->perf_mode == LEGACY_PCM_MODE) &&
-				(msm_bedais[reg].compr_passthr_mode ==
+				(msm_bedais[reg].passthr_mode ==
 					LEGACY_PCM))
 				msm_pcm_routing_cfg_pp(msm_bedais[reg].port_id,
 						       copp_idx, topology,
@@ -1023,7 +1023,7 @@ static void msm_pcm_routing_process_audio(u16 reg, u16 val, int set)
 			if ((DOLBY_ADM_COPP_TOPOLOGY_ID == topology ||
 				DS2_ADM_COPP_TOPOLOGY_ID == topology) &&
 			    (fdai->perf_mode == LEGACY_PCM_MODE) &&
-			    (msm_bedais[reg].compr_passthr_mode ==
+			    (msm_bedais[reg].passthr_mode ==
 				LEGACY_PCM))
 				msm_pcm_routing_deinit_pp(
 						msm_bedais[reg].port_id,
@@ -5842,13 +5842,13 @@ static int msm_pcm_routing_close(struct snd_pcm_substream *substream)
 			clear_bit(idx,
 				  &session_copp_map[i][session_type][be_id]);
 			if ((fdai->perf_mode == LEGACY_PCM_MODE) &&
-				(bedai->compr_passthr_mode == LEGACY_PCM))
+				(bedai->passthr_mode == LEGACY_PCM))
 				msm_pcm_routing_deinit_pp(bedai->port_id,
 							  topology);
 		}
 	}
 
-	bedai->compr_passthr_mode = LEGACY_PCM;
+	bedai->passthr_mode = LEGACY_PCM;
 	bedai->active = 0;
 	bedai->sample_rate = 0;
 	bedai->channel = 0;
@@ -5876,7 +5876,7 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 	bedai = &msm_bedais[be_id];
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		if (bedai->compr_passthr_mode != LEGACY_PCM)
+		if (bedai->passthr_mode != LEGACY_PCM)
 			path_type = ADM_PATH_COMPRESSED_RX;
 		else
 			path_type = ADM_PATH_PLAYBACK;
@@ -5955,7 +5955,7 @@ static int msm_pcm_routing_prepare(struct snd_pcm_substream *substream)
 			msm_pcm_routing_build_matrix(i, session_type, path_type,
 						     fdai->perf_mode);
 			if ((fdai->perf_mode == LEGACY_PCM_MODE) &&
-				(bedai->compr_passthr_mode ==
+				(bedai->passthr_mode ==
 					LEGACY_PCM))
 				msm_pcm_routing_cfg_pp(bedai->port_id, copp_idx,
 						       topology, channels);
@@ -6016,7 +6016,7 @@ static int msm_routing_send_device_pp_params(int port_id, int copp_idx)
 		clear_bit(ADM_PP_PARAM_MUTE_BIT, &pp_config);
 		mute_on = msm_bedais_pp_params[index].mute_on;
 		if ((msm_bedais[be_idx].active) &&
-			(msm_bedais[be_idx].compr_passthr_mode !=
+			(msm_bedais[be_idx].passthr_mode !=
 			 LEGACY_PCM))
 			adm_send_compressed_device_mute(port_id,
 								copp_idx,
@@ -6028,7 +6028,7 @@ static int msm_routing_send_device_pp_params(int port_id, int copp_idx)
 			  &pp_config);
 		latency = msm_bedais_pp_params[index].latency;
 		if ((msm_bedais[be_idx].active) &&
-			(msm_bedais[be_idx].compr_passthr_mode !=
+			(msm_bedais[be_idx].passthr_mode !=
 			 LEGACY_PCM))
 			adm_send_compressed_device_latency(port_id,
 							   copp_idx,
@@ -6083,7 +6083,7 @@ static int msm_routing_put_device_pp_params_mixer(struct snd_kcontrol *kcontrol,
 				continue;
 		pr_debug("%s: port: 0x%x, copp %ld, be active: %d, passt: %d\n",
 			 __func__, port_id, copp, msm_bedais[be_idx].active,
-			 msm_bedais[be_idx].compr_passthr_mode);
+			 msm_bedais[be_idx].passthr_mode);
 		switch (pp_id) {
 		case ADM_PP_PARAM_MUTE_ID:
 			pr_debug("%s: ADM_PP_PARAM_MUTE\n", __func__);
@@ -6092,7 +6092,7 @@ static int msm_routing_put_device_pp_params_mixer(struct snd_kcontrol *kcontrol,
 			set_bit(ADM_PP_PARAM_MUTE_BIT,
 				&msm_bedais_pp_params[index].pp_params_config);
 			if ((msm_bedais[be_idx].active) &&
-				(msm_bedais[be_idx].compr_passthr_mode !=
+				(msm_bedais[be_idx].passthr_mode !=
 				LEGACY_PCM))
 				adm_send_compressed_device_mute(port_id,
 					copp, mute);
@@ -6106,7 +6106,7 @@ static int msm_routing_put_device_pp_params_mixer(struct snd_kcontrol *kcontrol,
 			latency = msm_bedais_pp_params[index].latency =
 				ucontrol->value.integer.value[1];
 			if ((msm_bedais[be_idx].active) &&
-				(msm_bedais[be_idx].compr_passthr_mode !=
+				(msm_bedais[be_idx].passthr_mode !=
 				LEGACY_PCM))
 				adm_send_compressed_device_latency(port_id,
 					copp, latency);
