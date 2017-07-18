@@ -823,11 +823,12 @@ static ssize_t store_tap_to_wake(TouchDriverData *pDriverData, const char *buf, 
     int status = 0;
     sscanf(buf, "%d", &status);
     
-    LpwgCmd lpwgCmd = LPWG_CMD_MODE;
+    LpwgCmd lpwgCmd = LPWG_CMD_UNKNOWN;
+    lpwgCmd = LPWG_CMD_MODE;
     LpwgSetting *pLpwgSetting = NULL;
     TouchState nextState = STATE_UNKNOWN;
     
-    int value[1] = {1};
+    int value[1] = {0};
     value[0] = status;
     
     /* load stored previous setting */
