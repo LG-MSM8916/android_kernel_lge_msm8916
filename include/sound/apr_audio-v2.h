@@ -7181,7 +7181,7 @@ struct srs_trumedia_params {
 
 #define AUDPROC_PARAM_ID_ENABLE		0x00010904
 #define ASM_STREAM_POSTPROC_TOPO_ID_SA_PLUS 0x1000FFFF
-/* DTS Eagle */
+/* DTS Eagle 
 #define AUDPROC_MODULE_ID_DTS_HPX_PREMIX 0x0001077C
 #define AUDPROC_MODULE_ID_DTS_HPX_POSTMIX 0x0001077B
 #define ASM_STREAM_POSTPROC_TOPO_ID_DTS_HPX 0x00010DED
@@ -7196,7 +7196,7 @@ struct asm_dts_eagle_param {
 struct asm_dts_eagle_param_get {
 	struct apr_hdr	hdr;
 	struct asm_stream_cmd_get_pp_params_v2 param;
-} __packed;
+} __packed; */
 
 /* LSM Specific */
 #define VW_FEAT_DIM					(39)
