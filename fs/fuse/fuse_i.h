@@ -140,6 +140,8 @@ struct fuse_file {
 	/** Node id of this file */
 	u64 nodeid;
 
+	int shortcircuit_enabled;
+
 	/** Refcount */
 	atomic_t count;
 
