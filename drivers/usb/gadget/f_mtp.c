@@ -1331,10 +1331,6 @@ static void send_file_work(struct work_struct *data)
 		}
 
 		xfer = ret + hdr_size;
-		dev->perf[dev->dbg_read_index].vfs_rtime =
-			ktime_to_us(ktime_sub(ktime_get(), start_time));
-		dev->perf[dev->dbg_read_index].vfs_rbytes = xfer;
-		dev->dbg_read_index = (dev->dbg_read_index + 1) % MAX_ITERATION;
 		hdr_size = 0;
 
 		req->length = xfer;
@@ -1454,11 +1450,6 @@ static void receive_file_work(struct work_struct *data)
 					dev->state = STATE_ERROR;
 				break;
 			}
-			dev->perf[dev->dbg_write_index].vfs_wtime =
-				ktime_to_us(ktime_sub(ktime_get(), start_time));
-			dev->perf[dev->dbg_write_index].vfs_wbytes = ret;
-			dev->dbg_write_index =
-				(dev->dbg_write_index + 1) % MAX_ITERATION;
 			write_req = NULL;
 		}
 
@@ -2204,7 +2195,6 @@ static int mtp_bind_config(struct usb_configuration *c, bool ptp_config)
 	dev->function.desc_change = lge_mtp_desc_change;
 #endif
 
-	dev->is_ptp = ptp_config;
 	return usb_add_function(c, &dev->function);
 
 #ifdef CONFIG_LGE_USB_G_MULTIPLE_CONFIGURATION
@@ -2430,7 +2420,6 @@ static void mtp_cleanup(void)
 	if (!dev)
 		return;
 
-	mtp_debugfs_remove();
 	misc_deregister(&mtp_device);
 	destroy_workqueue(dev->wq);
 	_mtp_dev = NULL;

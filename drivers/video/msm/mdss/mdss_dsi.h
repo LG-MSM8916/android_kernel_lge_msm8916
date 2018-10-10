@@ -553,6 +553,8 @@ struct mdss_dsi_ctrl_pdata {
 	int horizontal_idle_cnt;
 	struct panel_horizontal_idle *line_idle;
 	struct mdss_util_intf *mdss_util;
+
+	bool dfps_status;	/* dynamic refresh status */
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_CODE_REFACTORING)
 	struct lge_pan_data *lge_pan_data;
 #endif
