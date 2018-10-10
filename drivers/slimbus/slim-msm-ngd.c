@@ -1355,7 +1355,7 @@ static int ngd_slim_probe(struct platform_device *pdev)
 	struct resource		*irq, *bam_irq;
 	bool			rxreg_access = false;
 	bool			slim_mdm = false;
-	const char		*ext_modem_id = NULL, *subsys_name = NULL;
+	const char		*ext_modem_id = NULL;
 
 	slim_mem = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						"slimbus_physical");
