@@ -55,6 +55,8 @@
 #define WCD9XXX_MBHC_DEF_RLOADS 5
 #define DEFAULT_MCLK_RATE 9600000
 
+#define SAMPLING_RATE_48KHZ 48000
+
 #define WCD_MBHC_DEF_RLOADS 5
 
 #ifdef CONFIG_SND_SOC_TPS61256A_BOOST
@@ -772,20 +774,6 @@ static int msm_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 		 substream->name, substream->stream);
 	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT, mi2s_rx_bit_format);
 	return 0;
-}
-
-static uint32_t get_mi2s_rx_clk_val(void)
-{
-	uint32_t clk_val;
-
-	clk_val = pri_rx_sample_rate * bits_per_sample * 2;
-
-	return clk_val;
-}
-
-static uint32_t get_mi2s_tx_clk_val(void)
-{
-	return mi2s_tx_sample_rate * bits_per_sample * 2;
 }
 
 static int ext_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)

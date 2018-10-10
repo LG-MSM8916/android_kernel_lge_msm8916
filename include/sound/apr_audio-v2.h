@@ -7619,6 +7619,7 @@ struct afe_clk_set {
 	 *	- 1 -- Enabled  @tablebulletend
 	 */
 	uint32_t enable;
+	uint32_t clk_val1;
 };
 
 struct afe_clk_cfg {
