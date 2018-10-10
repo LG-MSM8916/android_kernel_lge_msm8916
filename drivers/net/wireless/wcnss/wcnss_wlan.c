@@ -399,6 +399,7 @@ static struct {
 	int	user_cal_available;
 	u32	user_cal_rcvd;
 	u32	user_cal_exp_size;
+	int	device_opened;
 	int	iris_xo_mode_set;
 	int	fw_vbatt_state;
 	char	wlan_nv_macAddr[WLAN_MAC_ADDR_SIZE];
