@@ -789,8 +789,10 @@ static int ext_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 				pr_err("%s:afe_set_lpass_clock failed ret=%d\n",
 					__func__, ret);
 	}
+
+	}
+
 	return ret;
-}
 
 }
 
