@@ -272,12 +272,11 @@ struct qseecom_control {
 	bool no_clock_support;
 	unsigned int ce_opp_freq_hz;
 	bool appsbl_qseecom_support;
-
-	bool is_apps_region_protected;
-	int qsee_reentrancy_support;
-	int app_block_ref_cnt;
-	int app_block_wq;
-	int qseecom_state;
+	uint32_t qsee_reentrancy_support;
+	uint32_t app_block_ref_cnt;
+	wait_queue_head_t app_block_wq;
+	atomic_t qseecom_state;
+	int is_apps_region_protected;
 };
 
 struct qseecom_sec_buf_fd_info {
