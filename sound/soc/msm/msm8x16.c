@@ -810,6 +810,8 @@ static int ext_mi2s_clk_ctl(struct snd_pcm_substream *substream, bool enable)
 	return ret;
 }
 
+}
+
 static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm)
 {
