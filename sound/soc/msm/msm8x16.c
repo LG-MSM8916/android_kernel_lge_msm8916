@@ -387,24 +387,6 @@ static int msm_auxpcm_be_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
-static int msm8x16_get_clk_id(int port_id)
-{
-	switch (port_id) {
-	case AFE_PORT_ID_PRIMARY_MI2S_RX:
-		return Q6AFE_LPASS_CLK_ID_PRI_MI2S_IBIT;
-	case AFE_PORT_ID_SECONDARY_MI2S_RX:
-		return Q6AFE_LPASS_CLK_ID_SEC_MI2S_IBIT;
-	case AFE_PORT_ID_TERTIARY_MI2S_TX:
-		return Q6AFE_LPASS_CLK_ID_TER_MI2S_IBIT;
-	case AFE_PORT_ID_QUATERNARY_MI2S_RX:
-	case AFE_PORT_ID_QUATERNARY_MI2S_TX:
-		return Q6AFE_LPASS_CLK_ID_QUAD_MI2S_IBIT;
-	default:
-		pr_err("%s: invalid port_id: 0x%x\n", __func__, port_id);
-		return -EINVAL;
-	}
-}
-
 static int msm8x16_get_port_id(int be_id)
 {
 	switch (be_id) {
