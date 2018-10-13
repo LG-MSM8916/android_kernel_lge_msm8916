@@ -1782,18 +1782,6 @@ fail_cmd:
 	return ret;
 }
 
-static bool is_vptx_topology(int topology)
-{
-	if ((topology == VPM_TX_SM_ECNS_COPP_TOPOLOGY) ||
-	    (topology == VPM_TX_DM_FLUENCE_COPP_TOPOLOGY) ||
-	    (topology == VPM_TX_DM_RFECNS_COPP_TOPOLOGY) ||
-	    (topology == VPM_TX_LEC_STEREO_REF) ||
-	    (topology == VPM_TX_LEC_MONO_REF))
-		return true;
-
-	return false;
-}
-
 int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	     int perf_mode, uint16_t bit_width, int app_type, int acdb_id)
 {
