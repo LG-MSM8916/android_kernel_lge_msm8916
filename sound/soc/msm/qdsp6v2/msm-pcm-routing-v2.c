@@ -1424,52 +1424,6 @@ static int msm_routing_put_fm_pcmrx_switch_mixer(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
-static int msm_routing_lsm_port_get(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	ucontrol->value.integer.value[0] = lsm_port_index;
-	return 0;
-}
-
-static int msm_routing_lsm_port_put(struct snd_kcontrol *kcontrol,
-				   struct snd_ctl_elem_value *ucontrol)
-{
-	int lsm_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_5_TX;
-
-	pr_debug("%s: LSM enable %ld\n", __func__,
-			ucontrol->value.integer.value[0]);
-	switch (ucontrol->value.integer.value[0]) {
-	case 1:
-		lsm_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_0_TX;
-		break;
-	case 2:
-		lsm_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_1_TX;
-		break;
-	case 3:
-		lsm_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_2_TX;
-		break;
-	case 4:
-		lsm_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_3_TX;
-		break;
-	case 5:
-		lsm_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_4_TX;
-		break;
-	case 6:
-		lsm_port = AFE_PORT_ID_SLIMBUS_MULTI_CHAN_5_TX;
-		break;
-	case 7:
-		lsm_port = AFE_PORT_ID_TERTIARY_MI2S_TX;
-		break;
-	default:
-		pr_err("Default lsm port");
-		break;
-	}
-	set_lsm_port(lsm_port);
-	lsm_port_index = ucontrol->value.integer.value[0];
-
-	return 0;
-}
-
 static int msm_routing_lsm_func_get(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
 {
