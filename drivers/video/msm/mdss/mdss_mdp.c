@@ -1463,6 +1463,7 @@ static DEVICE_ATTR(vfps_fcnt, 0644, fps_fcnt_show, NULL);
 
 static struct attribute *mdp_fs_attrs[] = {
 	&dev_attr_caps.attr,
+	&dev_attr_bw_mode_bitmap.attr,
 #ifdef CONFIG_LGE_DISPLAY_VSYNC_SKIP
 	&dev_attr_vfps.attr,
 	&dev_attr_vfps_ratio.attr,
