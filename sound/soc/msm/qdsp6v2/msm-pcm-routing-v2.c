@@ -87,7 +87,11 @@ static const char * const lsm_port_text[] = {
 	SLIMBUS_0_TX_TEXT, SLIMBUS_1_TX_TEXT, SLIMBUS_2_TX_TEXT,
 	SLIMBUS_3_TX_TEXT, SLIMBUS_4_TX_TEXT, SLIMBUS_5_TX_TEXT,
 	TERT_MI2S_TX_TEXT
+};
+
+struct msm_pcm_route_bdai_pp_params {
 	u16 port_id; /* AFE port ID */
+	unsigned long pp_params_config;
 	bool mute_on;
 	int latency;
 };

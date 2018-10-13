@@ -2033,7 +2033,6 @@ mtp_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	while ((req = mtp_req_get(dev, &dev->intr_idle)))
 		mtp_request_free(req, dev->ep_intr);
 	dev->state = STATE_OFFLINE;
-	dev->is_ptp = false;
 #ifdef CONFIG_LGE_USB_G_MULTIPLE_CONFIGURATION
 	dev->allocated_func = 0;
 	dev->first_mtp_binded = false;
