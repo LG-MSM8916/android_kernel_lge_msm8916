@@ -375,7 +375,7 @@ done:
 
 
 /* ADM Info */
-void add_popp(u32 dev_idx, u32 port_id, u32 popp_id, u32 app_type)
+void add_popp(u32 dev_idx, u32 port_id, u32 popp_id)
 {
 	u32 i = 0;
 
@@ -393,9 +393,9 @@ void add_popp(u32 dev_idx, u32 port_id, u32 popp_id, u32 app_type)
 	rtac_adm_data.device[dev_idx].popp[
 		rtac_adm_data.device[dev_idx].num_of_popp].popp_topology =
 		q6asm_get_asm_topology();
-	rtac_adm_data.device[dev_idx].popp[
-		rtac_adm_data.device[dev_idx].num_of_popp++].app_type =
-		app_type;
+	//rtac_adm_data.device[dev_idx].popp[
+	//	rtac_adm_data.device[dev_idx].num_of_popp++].app_type =
+	//	app_type;
 done:
 	return;
 }
@@ -417,7 +417,7 @@ void rtac_add_adm_device(u32 port_id, u32 copp_id, u32 path_id, u32 popp_id)
 		for (; i < rtac_adm_data.num_of_dev; i++) {
 			if (rtac_adm_data.device[i].afe_port == port_id &&
 			    rtac_adm_data.device[i].copp == copp_id) {
-				add_popp(i, port_id, popp_id, app_type);
+				add_popp(i, port_id, popp_id);
 				goto done;
 			}
 			if (rtac_adm_data.device[i].num_of_popp ==
@@ -440,8 +440,8 @@ void rtac_add_adm_device(u32 port_id, u32 copp_id, u32 path_id, u32 popp_id)
 	rtac_adm_data.device[i].popp[
 		rtac_adm_data.device[i].num_of_popp].popp_topology =
 		q6asm_get_asm_topology();
-	rtac_adm_data.device[i].popp[
-		rtac_adm_data.device[i].num_of_popp++].app_type = app_type;
+	//rtac_adm_data.device[i].popp[
+	//	rtac_adm_data.device[i].num_of_popp++].app_type = app_type;
 done:
 	mutex_unlock(&rtac_adm_mutex);
 	return;
