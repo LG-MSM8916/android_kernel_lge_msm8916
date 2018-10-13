@@ -230,7 +230,7 @@ static int msm_compr_set_volume(struct snd_compr_stream *cstream,
 		pr_err("%s: session not active\n", __func__);
 		return -EPERM;
 	}
-	rtd = cstream->private_data;
+	
 	prtd = cstream->runtime->private_data;
 	if (prtd && prtd->audio_client) {
 		if (prtd->compr_passthr != LEGACY_PCM) {
@@ -243,32 +243,9 @@ static int msm_compr_set_volume(struct snd_compr_stream *cstream,
 		if (rc < 0) {
 			pr_err("%s: Send LR gain command failed rc=%d\n",
 				__func__, rc);
-		} else {
-			pr_debug("%s: now calling msm_dts_eagle_set_volume\n",
-				 __func__);
-			rc = msm_dts_eagle_set_volume(prtd->audio_client,
-						      volume_l, volume_r);
-			if (rc < 0) {
-				pr_err("%s: Send Volume command failed (DTS_EAGLE) rc=%d\n",
-						__func__, rc);
-			}
-			rc = q6asm_set_multich_gain(prtd->audio_client,
-				num_channels, gain_list, chmap, use_default);
-			break;
-		case Q6_SUBSYS_AVS2_6:
-			pr_debug("%s: call q6asm_set_lrgain\n", __func__);
-			rc = q6asm_set_lrgain(prtd->audio_client,
-						volume_l, volume_r);
-			if (rc < 0)
-				pr_err("%s: Send LR gain command failed rc=%d\n",
-					__func__, rc);
-			break;
-		case Q6_SUBSYS_INVALID:
-		default:
-			pr_err("%s: UNKNOWN AVS IMAGE\n", __func__);
-			return rc;
 		}
 	}
+	
 
 	return rc;
 }
@@ -3310,10 +3287,6 @@ static int msm_compr_audio_effects_config_put(struct snd_kcontrol *kcontrol,
 			msm_audio_effects_popless_eq_handler(prtd->audio_client,
 						    &(audio_effects->equalizer),
 						     values);
-		break;
-	case DTS_EAGLE_MODULE:
-		pr_debug("%s: DTS_EAGLE_MODULE\n", __func__);
-		msm_dts_eagle_handler_pre(prtd->audio_client, values);
 		break;
 	case SOFT_VOLUME_MODULE:
 		pr_debug("%s: SOFT_VOLUME_MODULE\n", __func__);
