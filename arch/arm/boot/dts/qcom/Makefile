@@ -73,15 +73,7 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-sim.dtb \
 	apq8009w-wtp.dtb \
 	apq8009w-cdp.dtb \
 	apq8009-mtp-wcd9326.dtb \
-<<<<<<< HEAD
-	msm8909-mtp-wcd9326.dtb \
-	msm8909-mtp-wcd9326-refboard.dtb \
-	msm8909-512mb-mtp-wcd9326-refboard.dtb \
-	apq8009-mtp-wcd9326-refboard.dtb \
-	apq8009-512mb-mtp-wcd9326-refboard.dtb
-=======
 	msm8909-mtp-wcd9326.dtb
->>>>>>> 8d0e4859f69... Import the lge kernel changes for the LG K10 (LGK420N)
 
 dtb-$(CONFIG_ARCH_MSM8916) += msm8916-cdp.dtb \
 	msm8916-cdp-smb1360.dtb \
