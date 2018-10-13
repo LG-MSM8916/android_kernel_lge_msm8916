@@ -5266,6 +5266,7 @@ static void msm_id_status_w(struct work_struct *w)
 	struct msm_otg *motg = container_of(w, struct msm_otg,
 						id_status_work.work);
 	int work = 0;
+	int id_state = 0;
 
 	dev_dbg(motg->phy.dev, "ID status_w\n");
 

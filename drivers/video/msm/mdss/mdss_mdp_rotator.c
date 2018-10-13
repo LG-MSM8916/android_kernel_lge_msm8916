@@ -623,6 +623,14 @@ int mdss_mdp_rotator_setup(struct msm_fb_data_type *mfd,
 		goto rot_err;
 
 	req->id = rot->session_id;
+	pipe = rot->pipe;
+	if (pipe && !(pipe->flags & MDP_SECURE_OVERLAY_SESSION) &&
+			pipe->mixer_left && pipe->mixer_left->ctl) {
+		ctl = rot->pipe->mixer_left->ctl;
+		mdss_mdp_perf_calc_pipe(pipe, &perf, NULL,
+				PERF_CALC_PIPE_SINGLE_LAYER);
+		ctl->bw_pending =  perf.bw_overlap;
+	}
 
  rot_err:
 	if (ret) {
@@ -630,6 +638,7 @@ int mdss_mdp_rotator_setup(struct msm_fb_data_type *mfd,
 		if (rot && (req->id == MSMFB_NEW_REQUEST))
 			mdss_mdp_rotator_finish(rot);
 	}
+
 	/*
 	 * overwrite the src format for rotator to dst format
 	 * for use by the user. On subsequent set calls, the

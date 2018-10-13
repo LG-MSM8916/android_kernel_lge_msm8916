@@ -1526,66 +1526,6 @@ static int msm_routing_lsm_func_put(struct snd_kcontrol *kcontrol,
 	return afe_port_set_mad_type(port_id, mad_type);
 }
 
-static int msm_routing_get_lec_ref_cfg_control(struct snd_kcontrol *kcontrol,
-					  struct snd_ctl_elem_value *ucontrol)
-{
-	return 0;
-}
-
-static int msm_routing_put_lec_ref_cfg_control(struct snd_kcontrol *kcontrol,
-					  struct snd_ctl_elem_value *ucontrol)
-{
-	int lec_ref_port_id;
-	struct route_ec_ref_cfg lec_ref_cfg;
-
-	switch (ucontrol->value.integer.value[0]) {
-	case 0:
-		lec_ref_port_id = AFE_PORT_INVALID;
-		break;
-	case 1:
-		lec_ref_port_id = SLIMBUS_0_RX;
-		break;
-	case 2:
-		lec_ref_port_id = AFE_PORT_ID_PRIMARY_MI2S_RX;
-		break;
-	case 3:
-		lec_ref_port_id = AFE_PORT_ID_PRIMARY_MI2S_TX;
-		break;
-	case 4:
-		lec_ref_port_id = AFE_PORT_ID_SECONDARY_MI2S_TX;
-		break;
-	case 5:
-		lec_ref_port_id = AFE_PORT_ID_TERTIARY_MI2S_TX;
-		break;
-	case 6:
-		lec_ref_port_id = AFE_PORT_ID_QUATERNARY_MI2S_TX;
-		break;
-	case 7:
-		lec_ref_port_id = AFE_PORT_ID_SECONDARY_MI2S_RX;
-		break;
-	default:
-		pr_err("%s LEC ref rx %ld not valid\n",
-			__func__, ucontrol->value.integer.value[0]);
-		lec_ref_port_id = AFE_PORT_INVALID;
-		return -EINVAL;
-	}
-
-	memset(&lec_ref_cfg, 0, sizeof(struct route_ec_ref_cfg));
-	lec_ref_cfg.port_id = lec_ref_port_id;
-	lec_ref_cfg.channel =
-			ucontrol->value.integer.value[1];
-	lec_ref_cfg.sample_rate =
-			ucontrol->value.integer.value[2];
-	lec_ref_cfg.bit_width =
-			ucontrol->value.integer.value[3];
-	adm_lec_ref_cfg(lec_ref_cfg);
-	pr_debug("%s: port id %d, channels %d, sample rate %d, bit width %d\n",
-	    __func__, lec_ref_cfg.port_id, lec_ref_cfg.channel,
-	    lec_ref_cfg.sample_rate, lec_ref_cfg.bit_width);
-
-	return 0;
-}
-
 
 static int msm_routing_slim_0_rx_aanc_mux_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
