@@ -122,11 +122,9 @@ static ssize_t panel_debug_base_offset_read(struct file *file,
 	len = snprintf(buf, sizeof(buf), "0x%02zx %zx\n", dbg->off, dbg->cnt);
 	if (len < 0 || len >= sizeof(buf))
 		return 0;
-	}
 
 	if ((count < sizeof(buf)) || copy_to_user(buff, buf, len))
 		return -EFAULT;
-	}
 
 	*ppos += len;	/* increase offset */
 
@@ -279,12 +277,10 @@ static ssize_t panel_debug_base_reg_read(struct file *file,
 
 	if (len < 0 || len >= sizeof(to_user_buf))
 		return 0;
-	}
 
 	if ((count < sizeof(to_user_buf))
 			|| copy_to_user(user_buf, to_user_buf, len))
 		return -EFAULT;
-	}
 
 	*ppos += len;	/* increase offset */
 	mutex_unlock(&mdss_debug_lock);
@@ -450,11 +446,9 @@ static ssize_t mdss_debug_base_offset_read(struct file *file,
 	len = snprintf(buf, sizeof(buf), "0x%08zx %zx\n", dbg->off, dbg->cnt);
 	if (len < 0 || len >= sizeof(buf))
 		return 0;
-	}
 
 	if ((count < sizeof(buf)) || copy_to_user(buff, buf, len))
 		return -EFAULT;
-	}
 
 	*ppos += len;	/* increase offset */
 
