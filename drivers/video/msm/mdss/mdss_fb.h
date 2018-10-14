@@ -322,6 +322,9 @@ struct msm_fb_data_type {
 	int ignore_aod;
 	int fakeu3;
 #endif
+
+	u32 bl_level_scaled;
+	bool allow_bl_update;
 };
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
