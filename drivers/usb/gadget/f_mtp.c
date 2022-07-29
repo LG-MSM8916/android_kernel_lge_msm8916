@@ -1434,8 +1434,6 @@ static void receive_file_work(struct work_struct *data)
 #ifdef CONFIG_LGE_USB_G_MTP_PROFILING
 			start = ktime_get();
 #endif
-			DBG(cdev, "rx %pK %d\n", write_req, write_req->actual);
-			start_time = ktime_get();
 			ret = vfs_write(filp, write_req->buf, write_req->actual,
 				&offset);
 #ifdef CONFIG_LGE_USB_G_MTP_PROFILING
