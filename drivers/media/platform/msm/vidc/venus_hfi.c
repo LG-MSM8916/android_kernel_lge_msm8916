@@ -3319,6 +3319,15 @@ static void venus_hfi_flush_debug_queue(
 	}
 }
 
+static void venus_hfi_process_sys_watchdog_timeout(
+				struct venus_hfi_device *device)
+{
+	struct msm_vidc_cb_cmd_done cmd_done;
+	memset(&cmd_done, 0, sizeof(struct msm_vidc_cb_cmd_done));
+	cmd_done.device_id = device->device_id;
+	device->callback(SYS_WATCHDOG_TIMEOUT, &cmd_done);
+}
+
 static void venus_hfi_response_handler(struct venus_hfi_device *device)
 {
 	u8 packet[VIDC_IFACEQ_MED_PKT_SIZE];
