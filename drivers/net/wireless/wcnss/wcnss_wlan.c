@@ -3153,8 +3153,7 @@ static ssize_t wcnss_wlan_read(struct file *fp, char __user
 {
 	int rc = 0;
 
-    //pr_err("wcnss: wcnss_wlan_read()\n");
-	if (!penv || !penv->device_opened)
+	if (!penv)
 		return -EFAULT;
 
 	rc = wait_event_interruptible(penv->read_wait, penv->fw_cal_rcvd
@@ -3193,8 +3192,7 @@ static ssize_t wcnss_wlan_write(struct file *fp, const char __user
 	int rc = 0;
 	char *cal_data = NULL;
 
-    // pr_err("wcnss: wcnss_wlan_write()\n");
-	if (!penv || !penv->device_opened || penv->user_cal_available)
+	if (!penv || penv->user_cal_available)
 		return -EFAULT;
 
 	if (!penv->user_cal_rcvd && count >= 4 && !penv->user_cal_exp_size) {
